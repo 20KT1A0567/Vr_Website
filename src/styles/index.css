@@ -1,0 +1,127 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --vr-bg: #060807;
+  --vr-bg-soft: #0b100d;
+  --vr-panel: rgba(14, 18, 15, 0.96);
+  --vr-panel-soft: rgba(18, 24, 20, 0.88);
+  --vr-border: rgba(255, 255, 255, 0.08);
+  --vr-accent: #89c73a;
+  --vr-accent-strong: #9edd43;
+  --vr-accent-soft: rgba(137, 199, 58, 0.12);
+  --vr-copy: rgba(229, 231, 235, 0.82);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Manrope", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(137, 199, 58, 0.14), transparent 30%),
+    radial-gradient(circle at top right, rgba(255, 214, 10, 0.08), transparent 24%),
+    linear-gradient(180deg, #0b0f0c 0%, #070907 52%, #050705 100%);
+  color: #e5e7eb;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.display-font {
+  font-family: "Sora", sans-serif;
+}
+
+.surface {
+  @apply rounded-4xl border border-slate-200/90 bg-white shadow-panel;
+}
+
+.eyebrow {
+  @apply inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700;
+}
+
+.button-primary {
+  @apply inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-800;
+}
+
+.button-secondary {
+  @apply inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50;
+}
+
+.store-dark-panel {
+  @apply rounded-[2rem] border shadow-[0_24px_60px_rgba(0,0,0,0.36)];
+  border-color: var(--vr-border);
+  background: linear-gradient(180deg, rgba(15, 19, 16, 0.98), rgba(10, 13, 11, 0.96));
+}
+
+.store-dark-panel-soft {
+  @apply rounded-[1.75rem] border;
+  border-color: rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(22, 28, 23, 0.9), rgba(13, 17, 14, 0.88));
+}
+
+.store-light-card {
+  @apply rounded-[1.6rem] border bg-white text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.12)];
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.store-kicker {
+  @apply inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em];
+  border-color: rgba(137, 199, 58, 0.3);
+  background: rgba(137, 199, 58, 0.08);
+  color: #bce772;
+}
+
+.store-primary-btn {
+  @apply inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold text-[#101510] transition hover:-translate-y-0.5;
+  background: linear-gradient(180deg, var(--vr-accent-strong), var(--vr-accent));
+}
+
+.store-secondary-btn {
+  @apply inline-flex items-center justify-center rounded-xl border px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.store-ghost-btn {
+  @apply inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-sm font-medium transition;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(229, 231, 235, 0.88);
+}
+
+.store-field {
+  @apply w-full rounded-xl border px-4 py-3 text-sm outline-none transition;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
+}
+
+.store-field::placeholder {
+  color: rgba(229, 231, 235, 0.34);
+}
+
+.store-field:focus {
+  border-color: rgba(137, 199, 58, 0.52);
+  box-shadow: 0 0 0 3px rgba(137, 199, 58, 0.12);
+}
+
+.store-select {
+  @apply store-field appearance-none pr-10;
+}
+
+.store-textarea {
+  @apply store-field rounded-[1.5rem];
+}
+
+.store-muted-copy {
+  color: rgba(229, 231, 235, 0.62);
+}
+
+.store-divider {
+  border-color: rgba(255, 255, 255, 0.08);
+}
