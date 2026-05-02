@@ -1,69 +1,73 @@
+import { useEffect, useMemo, useState } from "react";
+import { Boxes, Cpu, HardDrive, IndianRupee, MemoryStick, PackageCheck, Search, Shapes, Tag } from "lucide-react";
+import type { Dispatch, SetStateAction } from "react";
+import { Button } from "components/ui/Button";
+import type { Brand, Category, ProductCondition } from "types";
 import {
-  ChevronDown,
-  Cpu,
-  HardDrive,
-  IndianRupee,
-  MemoryStick,
-  Search,
-  Shapes,
-  SlidersHorizontal,
-  Tag
-} from "lucide-react";
-import { useMemo, useState } from "react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
-import type { Brand, Category } from "types";
-
-export interface CatalogFilterState {
-  q: string;
-  brandIds: number[];
-  categoryIds: number[];
-  processorOptions: string[];
-  ramOptions: number[];
-  storageOptions: number[];
-  minPrice: string;
-  maxPrice: string;
-}
+  type CatalogFilterCounts,
+  type CatalogFilterState,
+  conditionOptions,
+  formatStorageOption,
+  parseCatalogPrice
+} from "../../utils/catalogFilters";
+import { FilterCheckbox } from "./FilterCheckbox";
+import { FilterSection } from "./FilterSection";
+import { PriceSlider } from "./PriceSlider";
 
 interface FilterSidebarProps {
   brands: Brand[];
   categories: Category[];
-  categoryProductCounts?: Record<number, number>;
   processors: string[];
   ramOptions: number[];
   storageOptions: number[];
   priceBounds: { min: number; max: number };
+  counts: CatalogFilterCounts;
   state: CatalogFilterState;
   setState: Dispatch<SetStateAction<CatalogFilterState>>;
+  sticky?: boolean;
+  className?: string;
+  onClose?: () => void;
+  onClear: () => void;
+  onApply?: () => void;
 }
 
-type FilterSectionKey = "brand" | "ram" | "storage" | "processor" | "category" | "price";
+type FilterSectionKey = "category" | "brand" | "price" | "ram" | "storage" | "processor" | "condition" | "availability";
 
 function toggleSelection<T>(values: T[], value: T) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-}
-
-function formatStorage(storageGb: number) {
-  return storageGb >= 1024 ? `${storageGb / 1024} TB` : `${storageGb} GB`;
-}
-
-function formatCurrency(value: number) {
-  return `Rs. ${value.toLocaleString()}`;
 }
 
 function clampPrice(value: number, bounds: { min: number; max: number }) {
   return Math.min(bounds.max, Math.max(bounds.min, value));
 }
 
+function getConditionSelectionCount(conditions: ProductCondition[]) {
+  return conditions.length;
+}
+
+function clampManualPrice(value: string, bounds: { min: number; max: number }) {
+  const parsed = parseCatalogPrice(value);
+  if (typeof parsed !== "number") {
+    return "";
+  }
+  return String(clampPrice(parsed, bounds));
+}
+
 export function FilterSidebar({
   brands,
   categories,
-  categoryProductCounts = {},
   processors,
   ramOptions,
   storageOptions,
   priceBounds,
+  counts,
   state,
-  setState
+  setState,
+  sticky = true,
+  className = "",
+  onClose,
+  onClear,
+  onApply
 }: FilterSidebarProps) {
   const [brandSearch, setBrandSearch] = useState("");
   const [processorSearch, setProcessorSearch] = useState("");
@@ -78,12 +82,24 @@ export function FilterSidebar({
     [processorSearch, processors]
   );
 
-  const sliderMin = clampPrice(state.minPrice.trim() ? Number(state.minPrice) : priceBounds.min, priceBounds);
-  const sliderMax = clampPrice(state.maxPrice.trim() ? Number(state.maxPrice) : priceBounds.max, priceBounds);
-  const rangeStep = Math.max(500, Math.round((priceBounds.max - priceBounds.min) / 120));
-  const safeRange = Math.max(1, priceBounds.max - priceBounds.min);
-  const minProgress = ((sliderMin - priceBounds.min) / safeRange) * 100;
-  const maxProgress = ((sliderMax - priceBounds.min) / safeRange) * 100;
+  useEffect(() => {
+    if (state.categoryIds.length) {
+      setActiveSection("category");
+      return;
+    }
+    if (state.brandIds.length) {
+      setActiveSection("brand");
+      return;
+    }
+    if (state.minPrice.trim() || state.maxPrice.trim()) {
+      setActiveSection("price");
+    }
+  }, [state.brandIds.length, state.categoryIds.length, state.maxPrice, state.minPrice]);
+
+  const parsedMinPrice = parseCatalogPrice(state.minPrice);
+  const parsedMaxPrice = parseCatalogPrice(state.maxPrice);
+  const sliderMin = clampPrice(typeof parsedMinPrice === "number" ? parsedMinPrice : priceBounds.min, priceBounds);
+  const sliderMax = clampPrice(typeof parsedMaxPrice === "number" ? parsedMaxPrice : priceBounds.max, priceBounds);
 
   function setMinPrice(nextValue: number) {
     const safeMin = Math.min(clampPrice(nextValue, priceBounds), sliderMax);
@@ -103,295 +119,299 @@ export function FilterSidebar({
     }));
   }
 
-  function clearFilters() {
-    setState({
-      q: "",
-      brandIds: [],
-      categoryIds: [],
-      processorOptions: [],
-      ramOptions: [],
-      storageOptions: [],
-      minPrice: "",
-      maxPrice: ""
+  function commitMinPrice() {
+    setState((current) => {
+      const normalizedMin = clampManualPrice(current.minPrice, priceBounds);
+      const normalizedMax = clampManualPrice(current.maxPrice, priceBounds);
+      const safeMin = normalizedMin ? Number(normalizedMin) : priceBounds.min;
+      const safeMax = normalizedMax ? Number(normalizedMax) : priceBounds.max;
+      return {
+        ...current,
+        minPrice: normalizedMin,
+        maxPrice: normalizedMax && safeMax < safeMin ? String(safeMin) : normalizedMax
+      };
     });
-    setBrandSearch("");
-    setProcessorSearch("");
   }
 
-  function renderSectionHeader(key: FilterSectionKey, title: string, icon: ReactNode, count?: number) {
-    const open = activeSection === key;
-
-    return (
-      <button
-        type="button"
-        onClick={() => setActiveSection(open ? null : key)}
-        className="flex w-full items-center justify-between gap-3 rounded-[1.2rem] px-1 py-1 text-left"
-      >
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 text-[#a6d85e]">{icon}</div>
-          <div>
-            <div className="text-sm font-semibold text-white">{title}</div>
-            <div className="text-xs text-white/36">{count ? `${count} selected` : "Choose options"}</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {count ? (
-            <span className="rounded-full bg-[#89c73a]/15 px-2.5 py-1 text-xs font-semibold text-[#bde676]">{count}</span>
-          ) : null}
-          <ChevronDown className={`h-4 w-4 text-white/48 transition ${open ? "rotate-180" : ""}`} />
-        </div>
-      </button>
-    );
+  function commitMaxPrice() {
+    setState((current) => {
+      const normalizedMin = clampManualPrice(current.minPrice, priceBounds);
+      const normalizedMax = clampManualPrice(current.maxPrice, priceBounds);
+      const safeMin = normalizedMin ? Number(normalizedMin) : priceBounds.min;
+      const safeMax = normalizedMax ? Number(normalizedMax) : priceBounds.max;
+      return {
+        ...current,
+        minPrice: normalizedMin && safeMin > safeMax ? String(safeMax) : normalizedMin,
+        maxPrice: normalizedMax
+      };
+    });
   }
 
   return (
-    <aside className="store-dark-panel sticky top-28 h-fit p-5">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-[#89c73a] p-3 text-[#101510]">
-            <SlidersHorizontal className="h-5 w-5" />
-          </div>
+    <aside className={`${sticky ? "lg:sticky lg:top-28 lg:h-fit" : ""} ${className}`}>
+      <div className="rounded-[1.8rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/36">Filters</div>
-            <div className="mt-1 text-lg font-semibold text-white">Refine Your Search</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--vr-primary)]">Filters</div>
+            <div className="mt-1 text-lg font-bold text-[var(--vr-text)]">Refine Products</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClear} className="text-sm font-semibold text-[var(--vr-muted)] transition hover:text-[var(--vr-primary)]">
+              Clear All
+            </button>
+            {onClose ? (
+              <button type="button" onClick={onClose} className="rounded-full border border-[var(--vr-border)] p-2 text-slate-500 lg:hidden">
+                Close
+              </button>
+            ) : null}
           </div>
         </div>
-        <button type="button" onClick={clearFilters} className="text-sm font-semibold text-white/55 transition hover:text-white">
-          Clear all
-        </button>
-      </div>
 
-      <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.03] p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-white">
-          <Search className="h-4 w-4 text-[#a6d85e]" />
-          Search catalog
+        <div className="rounded-[1.4rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--vr-text)]">
+            <Search className="h-4 w-4 text-[var(--vr-primary)]" />
+            Search catalog
+          </div>
+          <div className="relative mt-3">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={state.q}
+              onChange={(event) => setState((current) => ({ ...current, q: event.target.value }))}
+              placeholder="Brand, model, processor..."
+              className="vr-input pl-11"
+            />
+          </div>
         </div>
-        <div className="relative mt-3">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/28" />
-          <input
-            value={state.q}
-            onChange={(event) => setState((current) => ({ ...current, q: event.target.value }))}
-            placeholder="Brand, model, processor..."
-            className="store-field pl-11"
-          />
-        </div>
-      </div>
 
-      <div className="mt-4 space-y-3">
-        <section className="rounded-[1.5rem] border border-white/8 bg-white/[0.02] p-4">
-          {renderSectionHeader("category", "Category", <Shapes className="h-4 w-4" />, state.categoryIds.length)}
-          {activeSection === "category" ? (
-            <div className="mt-4 grid gap-2">
-              {categories.map((category) => (
-                <label
-                  key={category.id}
-                  className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-3 text-sm ${
-                    (categoryProductCounts[category.id] ?? 0) > 0 || state.categoryIds.includes(category.id)
-                      ? "border-white/8 bg-black/20 text-white/74"
-                      : "border-white/6 bg-white/[0.015] text-white/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={state.categoryIds.includes(category.id)}
-                      disabled={(categoryProductCounts[category.id] ?? 0) === 0 && !state.categoryIds.includes(category.id)}
-                      onChange={() =>
-                        setState((current) => ({
-                          ...current,
-                          categoryIds: toggleSelection(current.categoryIds, category.id)
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-white/20 bg-transparent text-[#89c73a] focus:ring-[#89c73a]"
-                    />
-                    <span>{category.name}</span>
-                  </div>
-                  <span className="rounded-full bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/45">
-                    {categoryProductCounts[category.id] ?? 0}
-                  </span>
-                </label>
-              ))}
+        <div className="mt-4 space-y-3">
+          <FilterSection
+            title="Category"
+            subtitle={`${state.categoryIds.length || 0} selected`}
+            icon={<Shapes className="h-4 w-4" />}
+            open={activeSection === "category"}
+            selectedCount={state.categoryIds.length}
+            onToggle={() => setActiveSection((current) => (current === "category" ? null : "category"))}
+          >
+            <div className="grid gap-2">
+              {categories.map((category) => {
+                const count = counts.categoryCounts[category.id] ?? 0;
+                const checked = state.categoryIds.includes(category.id);
+                const disabled = count === 0 && !checked;
+
+                return (
+                  <FilterCheckbox
+                    key={category.id}
+                    label={category.name}
+                    count={count}
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => setState((current) => ({ ...current, categoryIds: toggleSelection(current.categoryIds, category.id) }))}
+                  />
+                );
+              })}
             </div>
-          ) : null}
-        </section>
+          </FilterSection>
 
-        <section className="rounded-[1.5rem] border border-white/8 bg-white/[0.02] p-4">
-          {renderSectionHeader("brand", "Brand", <Tag className="h-4 w-4" />, state.brandIds.length)}
-          {activeSection === "brand" ? (
-            <div className="mt-4 space-y-3">
+          <FilterSection
+            title="Brand"
+            subtitle={`${state.brandIds.length || 0} selected`}
+            icon={<Tag className="h-4 w-4" />}
+            open={activeSection === "brand"}
+            selectedCount={state.brandIds.length}
+            onToggle={() => setActiveSection((current) => (current === "brand" ? null : "brand"))}
+          >
+            <div className="space-y-3">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/28" />
-                <input
-                  value={brandSearch}
-                  onChange={(event) => setBrandSearch(event.target.value)}
-                  placeholder="Search brand..."
-                  className="store-field pl-11"
-                />
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input value={brandSearch} onChange={(event) => setBrandSearch(event.target.value)} placeholder="Search brand..." className="vr-input pl-11" />
               </div>
-              <div className="grid max-h-64 gap-2 overflow-y-auto pr-1">
-                {filteredBrands.map((brand) => (
-                  <label
-                    key={brand.id}
-                    className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/74"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={state.brandIds.includes(brand.id)}
+              <div className="vr-scrollbar grid max-h-64 gap-2 overflow-y-auto pr-1">
+                {filteredBrands.map((brand) => {
+                  const count = counts.brandCounts[brand.id] ?? 0;
+                  const checked = state.brandIds.includes(brand.id);
+                  const disabled = count === 0 && !checked;
+
+                  return (
+                    <FilterCheckbox
+                      key={brand.id}
+                      label={brand.name}
+                      count={count}
+                      checked={checked}
+                      disabled={disabled}
                       onChange={() => setState((current) => ({ ...current, brandIds: toggleSelection(current.brandIds, brand.id) }))}
-                      className="h-4 w-4 rounded border-white/20 bg-transparent text-[#89c73a] focus:ring-[#89c73a]"
                     />
-                    <span>{brand.name}</span>
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             </div>
-          ) : null}
-        </section>
+          </FilterSection>
 
-        <section className="rounded-[1.5rem] border border-white/8 bg-white/[0.02] p-4">
-          {renderSectionHeader("price", "Price", <IndianRupee className="h-4 w-4" />, state.minPrice.trim() || state.maxPrice.trim() ? 1 : 0)}
-          {activeSection === "price" ? (
-            <div className="mt-4 space-y-5">
-              <div className="rounded-[1.25rem] border border-white/8 bg-black/20 p-4">
-                <div className="relative px-2">
-                  <div className="absolute left-2 right-2 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/12" />
-                  <div
-                    className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#89c73a]"
-                    style={{ left: `calc(${minProgress}% + 0.5rem)`, right: `calc(${100 - maxProgress}% + 0.5rem)` }}
-                  />
-                  <input
-                    type="range"
-                    min={priceBounds.min}
-                    max={priceBounds.max}
-                    step={rangeStep}
-                    value={sliderMin}
-                    onChange={(event) => setMinPrice(Number(event.target.value))}
-                    className="relative h-6 w-full cursor-pointer appearance-none bg-transparent accent-[#89c73a]"
-                  />
-                  <input
-                    type="range"
-                    min={priceBounds.min}
-                    max={priceBounds.max}
-                    step={rangeStep}
-                    value={sliderMax}
-                    onChange={(event) => setMaxPrice(Number(event.target.value))}
-                    className="relative -mt-6 h-6 w-full cursor-pointer appearance-none bg-transparent accent-[#89c73a]"
-                  />
-                </div>
-                <div className="mt-3 flex items-center justify-between text-sm font-semibold text-white/78">
-                  <span>{formatCurrency(sliderMin)}</span>
-                  <span>{formatCurrency(sliderMax)}</span>
-                </div>
-              </div>
+          <FilterSection
+            title="Price Range"
+            subtitle="Set min and max"
+            icon={<IndianRupee className="h-4 w-4" />}
+            open={activeSection === "price"}
+            selectedCount={state.minPrice.trim() || state.maxPrice.trim() ? 1 : 0}
+            onToggle={() => setActiveSection((current) => (current === "price" ? null : "price"))}
+          >
+            <PriceSlider
+              bounds={priceBounds}
+              minValue={sliderMin}
+              maxValue={sliderMax}
+              minInput={state.minPrice}
+              maxInput={state.maxPrice}
+              onMinSliderChange={setMinPrice}
+              onMaxSliderChange={setMaxPrice}
+              onMinInputChange={(value) => setState((current) => ({ ...current, minPrice: value }))}
+              onMaxInputChange={(value) => setState((current) => ({ ...current, maxPrice: value }))}
+              onMinInputCommit={commitMinPrice}
+              onMaxInputCommit={commitMaxPrice}
+            />
+          </FilterSection>
 
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <input
-                  value={state.minPrice}
-                  onChange={(event) => setState((current) => ({ ...current, minPrice: event.target.value }))}
-                  placeholder={formatCurrency(priceBounds.min)}
-                  className="store-field"
-                />
-                <span className="text-white/28">-</span>
-                <input
-                  value={state.maxPrice}
-                  onChange={(event) => setState((current) => ({ ...current, maxPrice: event.target.value }))}
-                  placeholder={formatCurrency(priceBounds.max)}
-                  className="store-field"
-                />
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rounded-[1.5rem] border border-white/8 bg-white/[0.02] p-4">
-          {renderSectionHeader("ram", "RAM", <MemoryStick className="h-4 w-4" />, state.ramOptions.length)}
-          {activeSection === "ram" ? (
-            <div className="mt-4 flex flex-wrap gap-2">
+          <FilterSection
+            title="RAM"
+            subtitle={`${state.ramOptions.length || 0} selected`}
+            icon={<MemoryStick className="h-4 w-4" />}
+            open={activeSection === "ram"}
+            selectedCount={state.ramOptions.length}
+            onToggle={() => setActiveSection((current) => (current === "ram" ? null : "ram"))}
+          >
+            <div className="grid gap-2">
               {ramOptions.map((ram) => {
-                const selected = state.ramOptions.includes(ram);
+                const count = counts.ramCounts[ram] ?? 0;
+                const checked = state.ramOptions.includes(ram);
+                const disabled = count === 0 && !checked;
+
                 return (
-                  <button
+                  <FilterCheckbox
                     key={ram}
-                    type="button"
-                    onClick={() => setState((current) => ({ ...current, ramOptions: toggleSelection(current.ramOptions, ram) }))}
-                    className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                      selected
-                        ? "border-[#89c73a] bg-[#89c73a] text-[#101510]"
-                        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/20 hover:text-white"
-                    }`}
-                  >
-                    {ram} GB
-                  </button>
+                    label={`${ram} GB`}
+                    count={count}
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => setState((current) => ({ ...current, ramOptions: toggleSelection(current.ramOptions, ram) }))}
+                  />
                 );
               })}
             </div>
-          ) : null}
-        </section>
+          </FilterSection>
 
-        <section className="rounded-[1.5rem] border border-white/8 bg-white/[0.02] p-4">
-          {renderSectionHeader("storage", "Storage", <HardDrive className="h-4 w-4" />, state.storageOptions.length)}
-          {activeSection === "storage" ? (
-            <div className="mt-4 flex flex-wrap gap-2">
+          <FilterSection
+            title="Storage"
+            subtitle={`${state.storageOptions.length || 0} selected`}
+            icon={<HardDrive className="h-4 w-4" />}
+            open={activeSection === "storage"}
+            selectedCount={state.storageOptions.length}
+            onToggle={() => setActiveSection((current) => (current === "storage" ? null : "storage"))}
+          >
+            <div className="grid gap-2">
               {storageOptions.map((storage) => {
-                const selected = state.storageOptions.includes(storage);
+                const count = counts.storageCounts[storage] ?? 0;
+                const checked = state.storageOptions.includes(storage);
+                const disabled = count === 0 && !checked;
+
                 return (
-                  <button
+                  <FilterCheckbox
                     key={storage}
-                    type="button"
-                    onClick={() =>
-                      setState((current) => ({ ...current, storageOptions: toggleSelection(current.storageOptions, storage) }))
-                    }
-                    className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                      selected
-                        ? "border-[#89c73a] bg-[#89c73a] text-[#101510]"
-                        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/20 hover:text-white"
-                    }`}
-                  >
-                    {formatStorage(storage)}
-                  </button>
+                    label={formatStorageOption(storage)}
+                    count={count}
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => setState((current) => ({ ...current, storageOptions: toggleSelection(current.storageOptions, storage) }))}
+                  />
                 );
               })}
             </div>
-          ) : null}
-        </section>
+          </FilterSection>
 
-        <section className="rounded-[1.5rem] border border-white/8 bg-white/[0.02] p-4">
-          {renderSectionHeader("processor", "Processor", <Cpu className="h-4 w-4" />, state.processorOptions.length)}
-          {activeSection === "processor" ? (
-            <div className="mt-4 space-y-3">
+          <FilterSection
+            title="Processor"
+            subtitle={`${state.processorOptions.length || 0} selected`}
+            icon={<Cpu className="h-4 w-4" />}
+            open={activeSection === "processor"}
+            selectedCount={state.processorOptions.length}
+            onToggle={() => setActiveSection((current) => (current === "processor" ? null : "processor"))}
+          >
+            <div className="space-y-3">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/28" />
-                <input
-                  value={processorSearch}
-                  onChange={(event) => setProcessorSearch(event.target.value)}
-                  placeholder="Search processor..."
-                  className="store-field pl-11"
-                />
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input value={processorSearch} onChange={(event) => setProcessorSearch(event.target.value)} placeholder="Search processor..." className="vr-input pl-11" />
               </div>
-              <div className="grid max-h-64 gap-2 overflow-y-auto pr-1">
-                {filteredProcessors.map((processor) => (
-                  <label
-                    key={processor}
-                    className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/74"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={state.processorOptions.includes(processor)}
-                      onChange={() =>
-                        setState((current) => ({
-                          ...current,
-                          processorOptions: toggleSelection(current.processorOptions, processor)
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-white/20 bg-transparent text-[#89c73a] focus:ring-[#89c73a]"
+              <div className="vr-scrollbar grid max-h-64 gap-2 overflow-y-auto pr-1">
+                {filteredProcessors.map((processor) => {
+                  const count = counts.processorCounts[processor] ?? 0;
+                  const checked = state.processorOptions.includes(processor);
+                  const disabled = count === 0 && !checked;
+
+                  return (
+                    <FilterCheckbox
+                      key={processor}
+                      label={processor}
+                      count={count}
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() => setState((current) => ({ ...current, processorOptions: toggleSelection(current.processorOptions, processor) }))}
                     />
-                    <span>{processor}</span>
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             </div>
-          ) : null}
-        </section>
+          </FilterSection>
+
+          <FilterSection
+            title="Condition"
+            subtitle={`${getConditionSelectionCount(state.conditions)} selected`}
+            icon={<Boxes className="h-4 w-4" />}
+            open={activeSection === "condition"}
+            selectedCount={state.conditions.length}
+            onToggle={() => setActiveSection((current) => (current === "condition" ? null : "condition"))}
+          >
+            <div className="grid gap-2">
+              {conditionOptions.map((option) => {
+                const count = counts.conditionCounts[option.value] ?? 0;
+                const checked = state.conditions.includes(option.value);
+                const disabled = count === 0 && !checked;
+
+                return (
+                  <FilterCheckbox
+                    key={option.value}
+                    label={option.label}
+                    count={count}
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => setState((current) => ({ ...current, conditions: toggleSelection(current.conditions, option.value) }))}
+                  />
+                );
+              })}
+            </div>
+          </FilterSection>
+
+          <FilterSection
+            title="Availability"
+            subtitle={state.inStockOnly ? "1 selected" : "Choose options"}
+            icon={<PackageCheck className="h-4 w-4" />}
+            open={activeSection === "availability"}
+            selectedCount={state.inStockOnly ? 1 : 0}
+            onToggle={() => setActiveSection((current) => (current === "availability" ? null : "availability"))}
+          >
+            <FilterCheckbox
+              label="In Stock"
+              count={counts.inStockCount}
+              checked={state.inStockOnly}
+              disabled={counts.inStockCount === 0 && !state.inStockOnly}
+              onChange={() => setState((current) => ({ ...current, inStockOnly: !current.inStockOnly }))}
+            />
+          </FilterSection>
+        </div>
+
+        {onApply ? (
+          <div className="mt-4 lg:hidden">
+            <Button fullWidth size="lg" onClick={onApply}>
+              Apply Filters
+            </Button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

@@ -12,7 +12,8 @@ export default defineConfig(function (_a) {
                 pages: "/src/pages",
                 store: "/src/store",
                 styles: "/src/styles",
-                types: "/src/types"
+                types: "/src/types",
+                utils: "/src/utils"
             }
         },
         server: {

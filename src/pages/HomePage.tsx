@@ -1,377 +1,653 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2, MapPin, PhoneCall, ShieldCheck, Truck, Undo2 } from "lucide-react";
+import { usePageMeta } from "../hooks/usePageMeta";
+import { ArrowRight, CheckCircle2, Clock, Laptop2, MapPin, ShieldCheck, Sparkles, Star, Store, Truck, Undo2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { catalogApi } from "api/client";
 import { ProductCard } from "components/catalog/ProductCard";
+import { getButtonClassName } from "components/ui/Button";
+import { Card } from "components/ui/Card";
+import { EmptyState } from "components/ui/EmptyState";
+import { SectionHeader } from "components/ui/SectionHeader";
+import { SkeletonLoader } from "components/ui/SkeletonLoader";
+import { Badge } from "components/ui/Badge";
+import { catalogApi } from "api/client";
+import type { Category, Product } from "types";
 import { getApiErrorMessage } from "../utils/api";
+import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
+import {
+  formatCurrency,
+  getCategoryLink,
+  getProductMerchandisingScore,
+  getProductPrimaryImage,
+  isProductTodayDealActive,
+  isMeaningfulCatalogValue,
+  normalizeCatalogValue
+} from "../utils/catalog";
+import { getVideoEmbedUrl, isDirectVideoUrl } from "../utils/media";
 
-const storeHighlights = [
-  { title: "6 Month Warranty", subtitle: "On all eligible products", icon: ShieldCheck },
-  { title: "Quality Checked", subtitle: "Multi-point inspection process", icon: CheckCircle2 },
-  { title: "7 Days Easy Returns", subtitle: "No hidden return stress", icon: Undo2 },
-  { title: "Fast and Safe Delivery", subtitle: "Across Hyderabad and beyond", icon: Truck }
+const vrTechnologiesLogo = "/logo.jpg";
+const preferredCategoryOrder = ["Laptops", "Desktops", "Accessories", "Monitors", "Gaming Laptops", "MacBooks", "Workstations"];
+
+const trustBar = [
+  { title: "Warranty Included", subtitle: "Coverage with every eligible product", icon: ShieldCheck },
+  { title: "Quality Checked", subtitle: "Professionally tested before dispatch", icon: CheckCircle2 },
+  { title: "Easy Returns", subtitle: "Simple return support from our team", icon: Undo2 },
+  { title: "Fast Delivery", subtitle: "Pickup and delivery across branches", icon: Truck }
 ] as const;
 
-const bannerPlaceholderTerms = new Set(["hi", "hii", "hello", "test", "testing", "asd", "qwe", "demo", "sample", "banner"]);
+const useCasePresets = [
+  { title: "Student Essentials", description: "Portable, affordable systems for classes and study.", link: "/products?maxPrice=30000", icon: Laptop2 },
+  { title: "Office Productivity", description: "Reliable multitasking laptops for daily work.", link: "/products?ram=8", icon: Sparkles },
+  { title: "Design and Editing", description: "More RAM and sharper displays for creative workflows.", link: "/products?ram=16", icon: ShieldCheck },
+  { title: "Gaming and Performance", description: "High-spec machines with standout graphics value.", link: "/products?category=gaming%20laptops", icon: Store }
+] as const;
 
-function resolveBannerLink(linkUrl?: string) {
-  if (!linkUrl?.trim()) {
-    return "/products";
+function resolveBannerLink(linkUrl?: string, fallback = "/products") {
+  const normalized = linkUrl?.trim().toLowerCase();
+  if (!normalized || ["none", "null", "n/a", "na", "#", "javascript:void(0)"].includes(normalized)) {
+    return fallback;
   }
-
-  return linkUrl.trim();
+  return linkUrl?.trim() || fallback;
 }
 
-function getCategoryLink(slug?: string) {
-  return slug ? `/products?category=${encodeURIComponent(slug)}` : "/products";
+function sortCategories(categories: Category[]) {
+  return [...categories].sort((left, right) => {
+    const leftIndex = preferredCategoryOrder.findIndex((value) => value.toLowerCase() === left.name.toLowerCase());
+    const rightIndex = preferredCategoryOrder.findIndex((value) => value.toLowerCase() === right.name.toLowerCase());
+    const leftWeight = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+    const rightWeight = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+    if (leftWeight !== rightWeight) {
+      return leftWeight - rightWeight;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
-function normalizeBannerCopy(value?: string) {
-  return value?.replace(/\s+/g, " ").trim() ?? "";
+function categoryPlaceholder(category: Category) {
+  return category.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
-function isMeaningfulBannerCopy(value?: string) {
-  const normalized = normalizeBannerCopy(value);
-  if (!normalized) {
-    return false;
+function formatSpec(product: Product) {
+  return [product.processor, product.ramGb ? `${product.ramGb} GB RAM` : undefined, product.storageGb ? `${product.storageGb} GB storage` : undefined]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function getTodayDealEyebrow(product: Product) {
+  if (product.discountPercent && product.discountPercent > 0) {
+    return `${product.discountPercent}% Savings`;
+  }
+  if (product.categoryName) {
+    return `${product.categoryName} Deal`;
+  }
+  return "Limited-time offer";
+}
+
+function getDealCountdownTarget(products: Product[]) {
+  const futureEnds = products
+    .map((product) => (product.dealEndDate ? Date.parse(product.dealEndDate) : Number.NaN))
+    .filter((value) => Number.isFinite(value) && value > Date.now());
+
+  if (futureEnds.length) {
+    return Math.min(...futureEnds);
   }
 
-  const lowered = normalized.toLowerCase();
-  if (bannerPlaceholderTerms.has(lowered)) {
-    return false;
-  }
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+  return endOfDay.getTime();
+}
 
-  const alphaCharacters = lowered.replace(/[^a-z]/g, "").length;
-  if (alphaCharacters < 4) {
-    return false;
-  }
+function formatCountdown(targetTime: number, now: number) {
+  const remaining = Math.max(0, targetTime - now);
+  const days = Math.floor(remaining / 86_400_000);
+  const hours = Math.floor((remaining % 86_400_000) / 3_600_000);
+  const minutes = Math.floor((remaining % 3_600_000) / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1_000);
+  const daysPart = days > 0 ? `${days}d ` : "";
+  return `${daysPart}${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
 
-  const words = lowered.split(/\s+/).filter(Boolean);
-  if (words.length === 1 && lowered.length < 8) {
-    return false;
-  }
+function sortByMerchandisingPriority(products: Product[]) {
+  return [...products].sort((left, right) => {
+    const scoreDifference = getProductMerchandisingScore(right) - getProductMerchandisingScore(left);
+    if (scoreDifference !== 0) {
+      return scoreDifference;
+    }
+    return (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "");
+  });
+}
 
-  return lowered.length >= 6;
+function LoadingHomePage() {
+  return (
+    <div className="vr-page-shell space-y-6">
+      <Card variant="hero">
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <SkeletonLoader className="h-[320px]" />
+          <div className="space-y-4">
+            <SkeletonLoader className="h-10 w-40" />
+            <SkeletonLoader lines={4} />
+            <SkeletonLoader className="h-12 w-48" />
+          </div>
+        </div>
+      </Card>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Card key={index}>
+            <SkeletonLoader className="h-24" />
+            <SkeletonLoader className="mt-4 h-6 w-2/3" />
+            <SkeletonLoader className="mt-2 h-4 w-full" />
+          </Card>
+        ))}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <SkeletonLoader key={index} className="h-[420px]" />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function HomePage() {
+  usePageMeta();
+  const [now, setNow] = useState(() => Date.now());
+  const { recentlyViewed, clearHistory } = useRecentlyViewed();
   const bannersQuery = useQuery({ queryKey: ["banners"], queryFn: catalogApi.getBanners });
-  const featuredProductsQuery = useQuery({ queryKey: ["featured-products"], queryFn: catalogApi.getFeaturedProducts });
+  const homeSectionsQuery = useQuery({ queryKey: ["home-sections"], queryFn: catalogApi.getHomeSections });
+  const bestSellersQuery = useQuery({ queryKey: ["home-best-sellers"], queryFn: () => catalogApi.getBestSellers(6) });
   const allProductsQuery = useQuery({ queryKey: ["home-products"], queryFn: () => catalogApi.getProducts() });
   const categoriesQuery = useQuery({ queryKey: ["home-categories"], queryFn: catalogApi.getCategories });
   const storesQuery = useQuery({ queryKey: ["home-stores"], queryFn: catalogApi.getStores });
 
   const banners = bannersQuery.data ?? [];
-  const featuredProducts = featuredProductsQuery.data ?? [];
+  const homeSections = homeSectionsQuery.data ?? [];
   const allProducts = allProductsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
   const stores = storesQuery.data ?? [];
 
   const firstError =
-    bannersQuery.error ?? featuredProductsQuery.error ?? allProductsQuery.error ?? categoriesQuery.error ?? storesQuery.error ?? null;
+    bannersQuery.error ?? homeSectionsQuery.error ?? allProductsQuery.error ?? categoriesQuery.error ?? storesQuery.error ?? null;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const orderedCategories = useMemo(() => sortCategories(categories), [categories]);
+  const productsByCategory = useMemo(() => {
+    const groups = new Map<number, Product[]>();
+    for (const product of allProducts) {
+      if (!product.categoryId) {
+        continue;
+      }
+      const existing = groups.get(product.categoryId) ?? [];
+      existing.push(product);
+      groups.set(product.categoryId, existing);
+    }
+    return groups;
+  }, [allProducts]);
 
   const heroBanner = banners[0];
-  const heroTitle = isMeaningfulBannerCopy(heroBanner?.title) ? normalizeBannerCopy(heroBanner?.title) : "";
-  const heroSubtitle = isMeaningfulBannerCopy(heroBanner?.subtitle) ? normalizeBannerCopy(heroBanner?.subtitle) : "";
-  const heroHasEditorialCopy = Boolean(heroTitle || heroSubtitle);
-  const categoryProductCounts = useMemo(
+  const heroCategory = orderedCategories.find((category) => category.name.toLowerCase().includes("laptop")) ?? orderedCategories[0];
+  const heroTitle = isMeaningfulCatalogValue(heroBanner?.title)
+    ? normalizeCatalogValue(heroBanner?.title)
+    : "Certified Refurbished Laptops That Feel Premium and Cost Less";
+  const heroSubtitle = isMeaningfulCatalogValue(heroBanner?.subtitle)
+    ? normalizeCatalogValue(heroBanner?.subtitle)
+    : "";
+  const heroLink = resolveBannerLink(heroBanner?.linkUrl, heroCategory ? getCategoryLink(heroCategory) : "/products");
+  const heroDesktopImage = heroBanner?.desktopImageUrl ?? heroBanner?.imageUrl;
+  const heroMobileImage = heroBanner?.mobileImageUrl ?? heroDesktopImage;
+  const heroVideoEmbedUrl = getVideoEmbedUrl(heroBanner?.videoUrl);
+  const heroUsesDirectVideo = heroBanner?.mediaType === "VIDEO" && isDirectVideoUrl(heroBanner?.videoUrl);
+  const heroCtaLabel = isMeaningfulCatalogValue(heroBanner?.ctaText) ? normalizeCatalogValue(heroBanner?.ctaText) : `Shop ${heroCategory?.name ?? "the collection"}`;
+  const heroLinkIsExternal = heroLink.startsWith("http");
+
+  const featuredSection = useMemo(() => homeSections.find((section) => section.sectionType === "FEATURED_PRODUCTS") ?? null, [homeSections]);
+  const bestSellersSection = useMemo(() => homeSections.find((section) => section.sectionType === "BEST_SELLERS") ?? null, [homeSections]);
+  const newArrivalsSection = useMemo(() => homeSections.find((section) => section.sectionType === "NEW_ARRIVALS") ?? null, [homeSections]);
+  const todaysDealsSection = useMemo(() => homeSections.find((section) => section.sectionType === "TODAYS_DEALS") ?? null, [homeSections]);
+  const spotlightProducts = useMemo(() => sortByMerchandisingPriority(allProducts), [allProducts]);
+
+  const categoryCards = orderedCategories.slice(0, 4).map((category) => {
+    const leadProduct = (productsByCategory.get(category.id) ?? [])[0];
+    const previewImage = category.iconUrl ?? getProductPrimaryImage(leadProduct ?? { images: [] });
+    return { category, previewImage };
+  });
+
+  const featuredProducts = useMemo(() => {
+    const primary = featuredSection?.products.length ? featuredSection.products : spotlightProducts.filter((product) => product.featured);
+    const merged = new Map<number, Product>();
+    for (const product of primary) {
+      merged.set(product.id, product);
+    }
+    for (const product of spotlightProducts) {
+      if (merged.size >= 8) {
+        break;
+      }
+      merged.set(product.id, product);
+    }
+    return Array.from(merged.values()).slice(0, 8);
+  }, [featuredSection?.products, spotlightProducts]);
+
+  const bestSellerProducts = useMemo(() => {
+    if (bestSellersSection?.products.length) {
+      return bestSellersSection.products.slice(0, 8);
+    }
+    return (bestSellersQuery.data ?? []).slice(0, 8);
+  }, [bestSellersQuery.data, bestSellersSection?.products]);
+
+  const todaysDealProducts = useMemo(() => {
+    const configuredDeals = (todaysDealsSection?.products ?? []).filter((product) => isProductTodayDealActive(product));
+    if (configuredDeals.length) {
+      return sortByMerchandisingPriority(configuredDeals).slice(0, 4);
+    }
+    return sortByMerchandisingPriority(allProducts.filter((product) => isProductTodayDealActive(product))).slice(0, 4);
+  }, [allProducts, todaysDealsSection?.products]);
+
+  const newArrivalProducts = useMemo(() => {
+    if (newArrivalsSection?.products.length) {
+      return newArrivalsSection.products.slice(0, 8);
+    }
+    return [...allProducts].sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? "")).slice(0, 8);
+  }, [allProducts, newArrivalsSection?.products]);
+
+  const nearbyStores = useMemo(
     () =>
-      allProducts.reduce<Record<number, number>>((counts, product) => {
-        if (product.categoryId) {
-          counts[product.categoryId] = (counts[product.categoryId] ?? 0) + 1;
-        }
-        return counts;
-      }, {}),
-    [allProducts]
+      [...stores]
+        .sort((left, right) => {
+          const reviewGap = (right.googleReviewCount ?? 0) - (left.googleReviewCount ?? 0);
+          if (reviewGap !== 0) {
+            return reviewGap;
+          }
+          return (right.googleRating ?? 0) - (left.googleRating ?? 0);
+        })
+        .slice(0, 3),
+    [stores]
   );
-  const categoryCards = categories.filter((category) => (categoryProductCounts[category.id] ?? 0) > 0).slice(0, 4);
-  const nearbyStores = stores.slice(0, 2);
-  const bestDeals = useMemo(
-    () => [...allProducts].sort((left, right) => (right.discountPercent ?? 0) - (left.discountPercent ?? 0)).slice(0, 3),
-    [allProducts]
+
+  const todayDealsCountdown = useMemo(
+    () => (todaysDealProducts.length ? formatCountdown(getDealCountdownTarget(todaysDealProducts), now) : null),
+    [now, todaysDealProducts]
   );
 
   if (firstError) {
     return (
-      <div className="mx-auto max-w-[1600px] px-6 py-12 lg:px-10">
-        <div className="rounded-[2rem] border border-rose-200 bg-rose-50 px-8 py-10 text-rose-700">
-          <div className="text-sm font-semibold uppercase tracking-[0.24em]">Catalog API error</div>
-          <h1 className="mt-4 text-3xl font-bold text-rose-900">The website could not load products, banners, or catalog data.</h1>
+      <div className="vr-page-shell">
+        <Card className="border-rose-200 bg-rose-50 text-rose-700">
+          <div className="text-sm font-semibold uppercase tracking-[0.24em]">Catalog API Error</div>
+          <h1 className="mt-4 text-3xl font-bold text-rose-900">The homepage could not load catalog data.</h1>
           <p className="mt-3 text-base">{getApiErrorMessage(firstError, "Check the backend server and VITE_API_BASE_URL configuration.")}</p>
-        </div>
+        </Card>
       </div>
     );
   }
 
-  if (bannersQuery.isLoading || featuredProductsQuery.isLoading || allProductsQuery.isLoading || categoriesQuery.isLoading || storesQuery.isLoading) {
-    return (
-      <div className="mx-auto max-w-[1600px] px-6 py-12 lg:px-10">
-        <div className="store-dark-panel px-8 py-10 text-white/70">Loading homepage catalog data...</div>
-      </div>
-    );
+  if (bannersQuery.isLoading || homeSectionsQuery.isLoading || allProductsQuery.isLoading || categoriesQuery.isLoading || storesQuery.isLoading) {
+    return <LoadingHomePage />;
   }
 
   return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-6 px-6 py-8 lg:px-10">
-      <section className="store-dark-panel p-4 lg:p-5">
-        {heroBanner ? (
-          <a
-            href={resolveBannerLink(heroBanner.linkUrl)}
-            target={heroBanner.linkUrl?.startsWith("http") ? "_blank" : undefined}
-            rel={heroBanner.linkUrl?.startsWith("http") ? "noreferrer" : undefined}
-            className="group relative block overflow-hidden rounded-[1.6rem]"
-          >
-            <img
-              src={heroBanner.imageUrl}
-              alt={heroTitle || "Homepage banner"}
-              className="absolute inset-0 h-full w-full object-cover object-center transition duration-700 group-hover:scale-[1.03]"
-            />
-            <div
-              className={`absolute inset-0 ${
-                heroHasEditorialCopy
-                  ? "bg-[linear-gradient(90deg,rgba(7,10,8,0.9)_0%,rgba(7,10,8,0.68)_32%,rgba(7,10,8,0.18)_100%)]"
-                  : "bg-[linear-gradient(180deg,rgba(7,10,8,0.06)_0%,rgba(7,10,8,0.18)_46%,rgba(7,10,8,0.82)_100%)]"
-              }`}
-            />
-            <div className="relative z-10 flex min-h-[360px] flex-col justify-between px-6 py-6 lg:min-h-[410px] lg:px-10 lg:py-9">
-              {heroHasEditorialCopy ? (
-                <div className="max-w-[470px]">
-                  <div className="store-kicker">Best deals on refurbished laptops</div>
-                  {heroTitle ? <h1 className="mt-5 text-4xl font-extrabold uppercase leading-[1.05] text-white lg:text-5xl">{heroTitle}</h1> : null}
-                  {heroSubtitle ? <p className="mt-4 text-base leading-7 text-white/72 lg:text-lg">{heroSubtitle}</p> : null}
-                  <div className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#8fd23f] px-5 py-3 text-sm font-semibold text-[#101510]">
-                    Shop now
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              ) : (
-                <div />
-              )}
+    <div className="vr-page-shell space-y-6">
+      <section className="overflow-hidden rounded-[2rem] border border-[var(--vr-border)] bg-white p-3 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
+        <div className="group relative overflow-hidden rounded-[1.7rem] bg-[linear-gradient(135deg,#edf4ff,#dbeafe_48%,#fff7ed)]">
+          {heroBanner?.mediaType === "VIDEO" && heroBanner.videoUrl ? (
+            heroUsesDirectVideo ? (
+              <video
+                src={heroBanner.videoUrl}
+                poster={heroDesktopImage}
+                className="absolute inset-0 h-full w-full object-cover opacity-[0.96]"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+            ) : heroVideoEmbedUrl ? (
+              <iframe
+                src={`${heroVideoEmbedUrl}?autoplay=1&mute=1&controls=0&loop=1&playsinline=1&rel=0&modestbranding=1`}
+                title={heroTitle}
+                className="absolute inset-0 h-full w-full scale-[1.06] object-cover opacity-[0.96]"
+                allow="autoplay; encrypted-media; picture-in-picture"
+              />
+            ) : null
+          ) : heroDesktopImage ? (
+            <picture>
+              {heroMobileImage ? <source media="(max-width: 768px)" srcSet={heroMobileImage} /> : null}
+              <img src={heroDesktopImage} alt={heroTitle} className="absolute inset-0 h-full w-full object-cover opacity-[0.95]" />
+            </picture>
+          ) : null}
 
-              <div className={heroHasEditorialCopy ? "grid gap-3 border-t border-white/10 pt-5 text-sm text-white/78 md:grid-cols-4" : "space-y-3"}>
-                {!heroHasEditorialCopy ? (
-                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.2rem] border border-white/10 bg-black/25 px-4 py-4 backdrop-blur">
-                    <div>
-                      <div className="store-kicker border-white/15 bg-white/10 text-white">Featured campaign banner</div>
-                      <p className="mt-3 text-sm leading-6 text-white/72">
-                        Clean image-first banner rendering with a lighter overlay so uploaded campaign artwork stays readable.
-                      </p>
-                    </div>
-                    <div className="inline-flex items-center gap-2 rounded-xl bg-[#8fd23f] px-5 py-3 text-sm font-semibold text-[#101510]">
-                      Shop now
-                      <ArrowRight className="h-4 w-4" />
-                    </div>
-                  </div>
-                ) : null}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.88)_34%,rgba(248,250,252,0.35)_68%,rgba(255,255,255,0.08)_100%)]" />
 
-                <div className={`${heroHasEditorialCopy ? "grid gap-3 md:grid-cols-4" : "grid gap-3 rounded-[1.2rem] border border-white/10 bg-black/20 px-4 py-4 text-sm text-white/78 md:grid-cols-4"}`}>
-                  <div className="inline-flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-[#97d83e]" />
-                    6 Months Warranty
-                  </div>
-                  <div className="inline-flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-[#97d83e]" />
-                    Quality Checked
-                  </div>
-                  <div className="inline-flex items-center gap-2">
-                    <Undo2 className="h-4 w-4 text-[#97d83e]" />
-                    7 Days Easy Returns
-                  </div>
-                  <div className="inline-flex items-center gap-2">
-                    <Truck className="h-4 w-4 text-[#97d83e]" />
-                    Fast Delivery
-                  </div>
-                </div>
+          <div className="relative z-10 grid min-h-[430px] items-end gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-9">
+            <div className="max-w-[620px]">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="accent" className="bg-[rgba(245,158,11,0.18)] text-[#b45309]">
+                  {heroBanner?.mediaType === "VIDEO" ? "Video Campaign Live" : "Premium Refurbished Picks"}
+                </Badge>
+                {heroCategory ? <Badge tone="primary">{heroCategory.name}</Badge> : null}
+              </div>
+              <h1 className="display-font mt-5 text-[2.3rem] font-extrabold leading-[1.02] text-[var(--vr-dark)] sm:text-[2.8rem] lg:text-[3.55rem]">
+                {heroTitle}
+              </h1>
+              <p className="mt-4 max-w-[520px] text-base leading-8 text-[var(--vr-muted)] lg:text-lg">{heroSubtitle}</p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                {heroLinkIsExternal ? (
+                  <a href={heroLink} target="_blank" rel="noreferrer" className={getButtonClassName({ variant: "primary", size: "lg" })}>
+                    {heroCtaLabel}
+                  </a>
+                ) : (
+                  <Link to={heroLink} className={getButtonClassName({ variant: "primary", size: "lg" })}>
+                    {heroCtaLabel}
+                  </Link>
+                )}
+                <Link to="/products" className={getButtonClassName({ variant: "secondary", size: "lg" })}>
+                  Explore best sellers
+                </Link>
               </div>
             </div>
-          </a>
-        ) : (
-          <div className="rounded-[1.6rem] bg-[linear-gradient(135deg,#121813,#0b100d)] px-6 py-10 lg:px-10 lg:py-12">
-            <div className="store-kicker">Awaiting homepage banner</div>
-            <h1 className="mt-5 max-w-3xl text-4xl font-extrabold uppercase leading-tight text-white lg:text-5xl">
-              Publish your first campaign banner from the admin panel.
-            </h1>
-            <p className="mt-4 max-w-2xl text-lg text-white/68">The first active banner will be used here as the main storefront hero.</p>
-          </div>
-        )}
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {categoryCards.map((category) => (
-            <Link
-              key={category.id}
-              to={getCategoryLink(category.slug)}
-              className="store-light-card flex items-center gap-4 p-4 transition hover:-translate-y-1"
-            >
-              <div className="flex h-20 w-20 items-center justify-center rounded-[1.1rem] bg-[#f1f8e4]">
-                {category.iconUrl ? (
-                  <img src={category.iconUrl} alt={category.name} className="h-12 w-12 object-contain" />
+            <div className="grid gap-3 self-end sm:grid-cols-2">
+              {trustBar.map((item) => (
+                <div key={item.title} className="rounded-[1.4rem] border border-white/60 bg-white/78 p-4 shadow-[0_18px_34px_rgba(15,23,42,0.06)] backdrop-blur">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-2.5 text-[var(--vr-primary)]">
+                      <item.icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--vr-text)]">{item.title}</div>
+                      <div className="mt-1 text-xs text-[var(--vr-muted)]">{item.subtitle}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {categoryCards.map(({ category, previewImage }) => (
+          <Link key={category.id} to={getCategoryLink(category)}>
+            <Card className="vr-card-lift flex h-full items-center gap-4">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#eff6ff,#fff7ed)]">
+                {previewImage ? (
+                  <img src={previewImage} alt={category.name} className="h-full w-full object-contain p-3" />
                 ) : (
-                  <div className="h-12 w-12 rounded-[1rem] bg-[#8fd23f]/25" />
+                  <span className="display-font text-lg font-bold uppercase text-[var(--vr-primary)]">{categoryPlaceholder(category)}</span>
                 )}
               </div>
-              <div>
-                <div className="text-lg font-bold text-slate-950">{category.name}</div>
-                <div className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-[#5e8c26]">
-                  Explore now
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Shop Category</div>
+                <h3 className="mt-2 text-xl font-extrabold text-[var(--vr-text)]">{category.name}</h3>
+                <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
+                  Browse Now
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
+            </Card>
+          </Link>
+        ))}
+      </section>
+
+      {todaysDealProducts.length ? (
+        <section>
+          <SectionHeader
+            eyebrow="Today Deals"
+            title={todaysDealsSection?.title ?? "Today's Deals"}
+            action={
+              <div className="flex flex-wrap items-center gap-4">
+                {todayDealsCountdown ? <Badge tone="danger">Ends In {todayDealsCountdown}</Badge> : null}
+                <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
+                  View All <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            }
+          />
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-4">
+            {todaysDealProducts.map((product) => (
+              <Card key={product.id} variant="hero" className="vr-card-lift overflow-hidden p-0">
+                <Link to={`/products/${product.id}`} className="block h-full">
+                  <div className="flex h-full flex-col">
+                    <div className="border-b border-[var(--vr-border)] bg-[linear-gradient(135deg,#0f172a,#1e3a8a)] px-5 py-4 text-white">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#fde68a]">{getTodayDealEyebrow(product)}</div>
+                      <div className="mt-2 text-xl font-bold">{product.title}</div>
+                    </div>
+                    <div className="flex flex-1 flex-col justify-between gap-4 p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="max-w-[58%]">
+                          <p className="text-sm leading-7 text-[var(--vr-muted)]">{formatSpec(product) || "Curated for customers who need a strong deal fast."}</p>
+                          <div className="mt-4 text-2xl font-extrabold text-[var(--vr-text)]">{formatCurrency(product.price)}</div>
+                          {product.originalPrice ? <div className="mt-1 text-sm text-slate-400 line-through">{formatCurrency(product.originalPrice)}</div> : null}
+                        </div>
+                        {getProductPrimaryImage(product) ? (
+                          <img src={getProductPrimaryImage(product)} alt={product.title} className="h-28 w-28 object-contain" />
+                        ) : null}
+                      </div>
+                      <div className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
+                        Shop this deal
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              </Card>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* <section className="rounded-[1.9rem] bg-[linear-gradient(135deg,#0f172a,#1e3a8a)] px-5 py-6 text-white shadow-[0_22px_52px_rgba(15,23,42,0.18)]">
+        <SectionHeader
+          eyebrow="Why Customers Convert"
+          title="Trust signals that reduce hesitation"
+          description="Warranty, quality checks, returns, and delivery assurance should stay visible before the customer reaches checkout."
+        />
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {trustBar.map((item) => (
+            <div key={item.title} className="rounded-[1.35rem] border border-white/10 bg-white/10 p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-white/14 p-2.5 text-[#fde68a]">
+                  <item.icon className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">{item.title}</div>
+                  <div className="mt-1 text-xs text-white/70">{item.subtitle}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section> */}
+
+      <section>
+        <SectionHeader
+          eyebrow="Featured Products"
+          title={featuredSection?.title ?? "Handpicked picks worth spotlighting"}
+          action={
+            <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
+              View All <ArrowRight className="h-4 w-4" />
             </Link>
+          }
+        />
+        <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {featuredProducts.slice(0, 8).map((product) => (
+            <ProductCard key={product.id} product={product} />
           ))}
         </div>
       </section>
 
-      <section className="store-dark-panel p-5">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.24em] text-[#a9dc63]">Featured laptops</div>
-            <h2 className="mt-2 text-2xl font-bold text-white lg:text-3xl">Admin-picked products for the homepage spotlight.</h2>
-          </div>
-          <Link to="/products" className="inline-flex items-center gap-2 text-sm font-semibold text-[#a9dc63]">
-            View all
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        {featuredProducts.length ? (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {featuredProducts.map((product) => (
+      <section>
+        <SectionHeader
+          eyebrow="Best Sellers"
+          title={bestSellersSection?.title ?? "Our most-loved picks"}
+          action={
+            <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
+              View All <ArrowRight className="h-4 w-4" />
+            </Link>
+          }
+        />
+        {bestSellerProducts.length ? (
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            {bestSellerProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
         ) : (
-          <div className="rounded-[1.6rem] border border-dashed border-white/10 bg-white/[0.03] px-6 py-10 text-center text-white/58">
-            Mark products as featured from the admin panel to populate this section.
+          <div className="mt-5">
+            <EmptyState
+              eyebrow="Best Sellers"
+              title="Best seller cards will appear here."
+              description="Mark products as best sellers in admin or build order history to populate this section automatically."
+            />
           </div>
         )}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {storeHighlights.map((item) => (
-          <div key={item.title} className="store-dark-panel-soft p-5">
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-[#89c73a]/12 p-3 text-[#a9dc63]">
-                <item.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-base font-semibold text-white">{item.title}</div>
-                <div className="mt-1 text-sm text-white/52">{item.subtitle}</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </section>
-
-      <section className="store-dark-panel p-5">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.24em] text-[#a9dc63]">Available at your nearby stores</div>
-            <h2 className="mt-2 text-2xl font-bold text-white lg:text-3xl">Choose a branch with real pickup and support coverage.</h2>
-          </div>
-          <Link to="/stores" className="inline-flex items-center gap-2 text-sm font-semibold text-[#a9dc63]">
-            View all stores
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-[1fr_1fr_0.9fr]">
-          {nearbyStores.map((store) => (
-            <article key={store.id} className="store-light-card grid gap-4 p-4 md:grid-cols-[120px_1fr_auto]">
-              <div className="aspect-[4/3] overflow-hidden rounded-[1rem] bg-slate-100">
-                {store.imageUrl ? <img src={store.imageUrl} alt={store.name} className="h-full w-full object-cover" /> : null}
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-950">{store.name}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {store.address}, {store.city}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
-                  <span className="inline-flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5 text-[#5f8e25]" />
-                    {store.city}
-                  </span>
-                  <span className="inline-flex items-center gap-2">
-                    <PhoneCall className="h-3.5 w-3.5 text-[#5f8e25]" />
-                    {store.phone}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                {store.mapLink ? (
-                  <a
-                    href={store.mapLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-lg bg-[#89c73a] px-4 py-2 text-xs font-semibold text-[#101510]"
-                  >
-                    View Store
-                  </a>
-                ) : null}
-              </div>
-            </article>
-          ))}
-
-          <div className="rounded-[1.6rem] border border-[#aacd7a]/15 bg-[linear-gradient(135deg,rgba(160,214,90,0.2),rgba(255,255,255,0.02))] p-6">
-            <div className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c8ee88]">Check product availability</div>
-            <h3 className="mt-4 text-2xl font-bold text-white">Store-ready stock visibility</h3>
-            <p className="mt-3 text-sm leading-7 text-white/64">
-              Customers can review branch availability before checkout and choose the exact store that will fulfill the order.
-            </p>
-            <Link to="/stores" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#89c73a] px-4 py-3 text-sm font-semibold text-[#101510]">
-              Choose store
-              <ArrowRight className="h-4 w-4" />
+      <section>
+        <SectionHeader
+          eyebrow="New Arrivals"
+          title={newArrivalsSection?.title ?? "Fresh arrivals — just in"}
+          action={
+            <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
+              View All <ArrowRight className="h-4 w-4" />
             </Link>
-          </div>
+          }
+        />
+        <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {newArrivalProducts.slice(0, 8).map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
         </div>
       </section>
 
-      <section className="store-dark-panel p-5">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.24em] text-[#a9dc63]">Today's best deals</div>
-            <h2 className="mt-2 text-2xl font-bold text-white lg:text-3xl">Deal-led banners generated from live catalog pricing.</h2>
-          </div>
-          <Link to="/products" className="inline-flex items-center gap-2 text-sm font-semibold text-[#a9dc63]">
-            View all deals
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        {bestDeals.length ? (
-          <div className="grid gap-4 xl:grid-cols-3">
-            {bestDeals.map((product) => (
+      {recentlyViewed.length > 0 ? (
+        <section>
+          <SectionHeader
+            eyebrow="Recently Viewed"
+            title="Pick up where you left off"
+            action={
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={clearHistory}
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--vr-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--vr-muted)] transition hover:text-[var(--vr-danger)]"
+                >
+                  Clear history
+                </button>
+              </div>
+            }
+          />
+          <div className="mt-5 flex gap-4 overflow-x-auto pb-2">
+            {recentlyViewed.slice(0, 8).map((product) => (
               <Link
                 key={product.id}
                 to={`/products/${product.id}`}
-                className="overflow-hidden rounded-[1.6rem] border border-[#cce6a0]/20 bg-[linear-gradient(135deg,rgba(186,235,106,0.18),rgba(255,255,255,0.04))] p-5 transition hover:-translate-y-1"
+                className="group flex w-[180px] shrink-0 flex-col overflow-hidden rounded-[1.4rem] border border-[var(--vr-border)] bg-white shadow-[0_8px_20px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:shadow-[0_16px_32px_rgba(15,23,42,0.09)]"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="max-w-[65%]">
-                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#d2f495]">
-                      {product.discountPercent ? `${product.discountPercent}% off` : product.categoryName || "Top deal"}
-                    </div>
-                    <h3 className="mt-3 text-xl font-bold text-white">{product.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-white/68">
-                      {product.processor || "Configured system"} {product.ramGb ? `- ${product.ramGb} GB RAM` : ""}
-                    </p>
-                    <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#d2f495]">
-                      Shop now
-                      <ArrowRight className="h-4 w-4" />
-                    </div>
-                  </div>
+                <div className="flex h-32 items-center justify-center border-b border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-3">
                   {product.images[0]?.imageUrl ? (
-                    <img src={product.images[0].imageUrl} alt={product.title} className="h-28 w-32 object-contain" />
-                  ) : null}
+                    <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-contain" />
+                  ) : (
+                    <Clock className="h-8 w-8 text-[var(--vr-border)]" />
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col justify-between p-3">
+                  <div className="text-xs font-semibold leading-tight text-[var(--vr-text)] line-clamp-2">{product.title}</div>
+                  <div className="mt-2 text-sm font-extrabold text-[var(--vr-primary)]">
+                    ₹{product.price.toLocaleString("en-IN")}
+                  </div>
                 </div>
               </Link>
             ))}
           </div>
-        ) : (
-          <div className="rounded-[1.6rem] border border-dashed border-white/10 bg-white/[0.03] px-6 py-10 text-center text-white/58">
-            Add products with pricing and discounts to surface live deal tiles here.
-          </div>
-        )}
+        </section>
+      ) : null}
+
+      <section>
+        <SectionHeader
+          eyebrow="Shop by Use Case"
+          title="Find the right machine for you"
+        />
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {useCasePresets.map((item) => (
+            <Link key={item.title} to={item.link}>
+              <Card className="vr-card-lift h-full">
+                <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-3 text-[var(--vr-primary)] w-fit">
+                  <item.icon className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-xl font-bold text-[var(--vr-text)]">{item.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-[var(--vr-muted)]">{item.description}</p>
+                <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
+                  Explore
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeader
+          eyebrow="Store Network"
+          title="Visit us at our branches"
+          action={<Link to="/stores" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">View All Stores <ArrowRight className="h-4 w-4" /></Link>}
+        />
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          {nearbyStores.map((store) => (
+            <Card key={store.id} className="overflow-hidden p-0">
+              <div className="overflow-hidden border-b border-[var(--vr-border)] bg-[linear-gradient(135deg,#eef4ff,#fff7ed)]">
+                {store.imageUrl ? (
+                  <img src={store.imageUrl} alt={store.name} className="h-48 w-full object-cover" />
+                ) : (
+                  <div className="flex h-48 items-center justify-center">
+                    <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-20 w-20 rounded-[1.2rem] border border-[var(--vr-border)] bg-white p-2" />
+                  </div>
+                )}
+              </div>
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">{store.city}</div>
+                    <h3 className="mt-2 text-xl font-bold text-[var(--vr-text)]">{store.name}</h3>
+                  </div>
+                  {store.googleRating != null ? (
+                    <Badge tone="accent">
+                      <Star className="h-3.5 w-3.5 fill-current" />
+                      {store.googleRating.toFixed(1)}
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="mt-3 text-sm leading-7 text-[var(--vr-muted)]">{store.address}</p>
+                <div className="mt-4 flex flex-wrap gap-3 text-sm text-[var(--vr-muted)]">
+                  <span className="inline-flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-[var(--vr-primary)]" />
+                    {store.state}
+                  </span>
+                  {store.googleReviewCount ? <span>{store.googleReviewCount} Google reviews</span> : null}
+                </div>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {store.mapLink ? (
+                    <a href={store.mapLink} target="_blank" rel="noreferrer" className={getButtonClassName({ variant: "primary", size: "sm" })}>
+                      Directions
+                    </a>
+                  ) : null}
+                  {store.whatsapp ? (
+                    <a href={`https://wa.me/${store.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className={getButtonClassName({ variant: "secondary", size: "sm" })}>
+                      WhatsApp
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
       </section>
     </div>
   );
