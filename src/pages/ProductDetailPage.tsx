@@ -23,6 +23,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { catalogApi, customerApi } from "api/client";
+import { ProductCard } from "components/catalog/ProductCard";
 import { ProductImageZoom } from "components/catalog/ProductImageZoom";
 import { Button } from "components/ui/Button";
 import { Card } from "components/ui/Card";
@@ -30,6 +31,7 @@ import { SectionHeader } from "components/ui/SectionHeader";
 import { StatusChip } from "components/ui/StatusChip";
 import { StickyMobileBar } from "components/ui/StickyMobileBar";
 import { useAuthStore } from "store/authStore";
+import { useCartStore } from "store/cartStore";
 import { useCompareStore } from "store/compareStore";
 import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
 import { useReviews } from "../hooks/useReviews";
@@ -37,6 +39,7 @@ import { useProductAlerts } from "../hooks/useProductAlerts";
 import type { Product } from "types";
 import { useWishlist } from "../hooks/useWishlist";
 import { getApiErrorMessage } from "../utils/api";
+import { showCartToast } from "../utils/cartNotifications";
 import {
   formatCurrency,
   getProductPrimaryImage,
@@ -102,11 +105,17 @@ export function ProductDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const addGuestCartItem = useCartStore((state) => state.addGuestCartItem);
   const { isWishlisted, isWishlistUpdating, toggleWishlist } = useWishlist();
   const { addToCompare, removeFromCompare, isInCompare } = useCompareStore();
   const { trackProduct } = useRecentlyViewed();
   const productQuery = useQuery({ queryKey: ["product", id], queryFn: () => catalogApi.getProduct(id), enabled: Boolean(id) });
   const product = productQuery.data;
+  const relatedProductsQuery = useQuery({
+    queryKey: ["related-products", product?.categoryId ?? null, product?.id ?? null],
+    queryFn: () => catalogApi.getProducts(product?.categoryId ? { categoryId: product.categoryId } : undefined),
+    enabled: Boolean(product?.categoryId)
+  });
 
   usePageMeta({
     title: product?.title,
@@ -117,6 +126,7 @@ export function ProductDetailPage() {
   const { isAlerted, subscribe, unsubscribe } = useProductAlerts(product?.id ?? 0);
 
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showVideo, setShowVideo] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
   const [pendingCartAction, setPendingCartAction] = useState<"cart" | "buyNow" | null>(null);
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: "", body: "", authorName: user?.name ?? "" });
@@ -126,6 +136,7 @@ export function ProductDetailPage() {
 
   useEffect(() => {
     setActiveIndex(0);
+    setShowVideo(false);
     setActiveTab("description");
     if (product) trackProduct(product);
   }, [product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -192,12 +203,22 @@ export function ProductDetailPage() {
   const videoEmbedUrl = getVideoEmbedUrl(product.videoUrl);
   const directVideoUrl = isDirectVideoUrl(product.videoUrl);
   const whatsappNumber = product.stores.find((store) => store.whatsapp)?.whatsapp ?? "919999999999";
+  const relatedProducts = (relatedProductsQuery.data ?? [])
+    .filter((item) => item.id !== product.id)
+    .slice(0, 4);
 
   async function handleAddToCart() {
-    if (!product || !user || pendingCartAction) {
-      if (!user) {
-        toast.error("Login to add this product to cart");
-      }
+    if (!product || pendingCartAction) {
+      return;
+    }
+    if (!product.available) {
+      toast.error("This product is currently unavailable");
+      return;
+    }
+
+    if (!user) {
+      addGuestCartItem(product, 1);
+      showCartToast({ variant: "saved", productTitle: product.title, items: useCartStore.getState().guestCart });
       return;
     }
 
@@ -205,7 +226,7 @@ export function ProductDetailPage() {
     try {
       const updatedCart = await customerApi.addToCart(product.id, 1);
       queryClient.setQueryData(["cart"], updatedCart);
-      toast.success("Added to cart");
+      showCartToast({ variant: "added", productTitle: product.title, items: updatedCart });
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to add product to cart"));
     } finally {
@@ -257,57 +278,82 @@ export function ProductDetailPage() {
       <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <section className="space-y-6">
           <Card className="p-4 sm:p-5">
-            <ProductImageZoom imageUrl={activeImage.imageUrl} alt={product.title} />
-
-            <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-5">
-              {images.map((image, index) => (
-                <button
-                  key={image.id}
-                  type="button"
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => setActiveIndex(index)}
-                  className={`aspect-square overflow-hidden rounded-[1rem] border p-1 transition ${
-                    index === activeIndex ? "border-[var(--vr-primary)] bg-white shadow-[0_0_0_3px_rgba(30,58,138,0.1)]" : "border-[var(--vr-border)] bg-[var(--vr-surface-soft)]"
-                  }`}
-                >
-                  {image.imageUrl ? (
-                    <img src={image.imageUrl} alt="" className="h-full w-full rounded-[0.8rem] object-contain bg-white p-2" />
-                  ) : (
-                    <div className="h-full w-full rounded-[0.8rem] bg-white" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {product.videoUrl ? (
-            <Card className="overflow-hidden p-0">
-              <div className="border-b border-[var(--vr-border)] px-5 py-4">
-                <div className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
-                  <PlayCircle className="h-4 w-4" />
-                  Product Video
-                </div>
-              </div>
-              <div className="aspect-video bg-[var(--vr-surface-soft)]">
+            {showVideo && product.videoUrl ? (
+              <div className="relative aspect-square overflow-hidden rounded-[1.4rem] bg-black sm:aspect-[4/3]">
                 {directVideoUrl ? (
-                  <video src={product.videoUrl} controls className="h-full w-full object-cover" />
+                  <video
+                    src={product.videoUrl}
+                    poster={activeImage.imageUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="h-full w-full object-contain"
+                  />
                 ) : videoEmbedUrl ? (
                   <iframe
-                    src={videoEmbedUrl}
+                    src={`${videoEmbedUrl}?autoplay=1&rel=0&modestbranding=1`}
                     title={`${product.title} video`}
                     className="h-full w-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-[var(--vr-muted)]">Video preview unavailable.</div>
+                  <div className="flex h-full items-center justify-center text-sm text-white/80">Video preview unavailable.</div>
                 )}
               </div>
-            </Card>
-          ) : null}
+            ) : (
+              <ProductImageZoom imageUrl={activeImage.imageUrl} alt={product.title} />
+            )}
+
+            <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-5">
+              {images.map((image, index) => (
+                <button
+                  key={image.id}
+                  type="button"
+                  onMouseEnter={() => {
+                    setShowVideo(false);
+                    setActiveIndex(index);
+                  }}
+                  onClick={() => {
+                    setShowVideo(false);
+                    setActiveIndex(index);
+                  }}
+                  className={`aspect-square overflow-hidden rounded-[1rem] border p-1 transition ${
+                    !showVideo && index === activeIndex ? "border-[var(--vr-primary)] bg-white shadow-[0_0_0_3px_rgba(30,58,138,0.1)]" : "border-[var(--vr-border)] bg-[var(--vr-surface-soft)]"
+                  }`}
+                >
+                  {image.imageUrl ? (
+                    <img src={image.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full rounded-[0.8rem] object-contain bg-white p-2" />
+                  ) : (
+                    <div className="h-full w-full rounded-[0.8rem] bg-white" />
+                  )}
+                </button>
+              ))}
+              {product.videoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => setShowVideo(true)}
+                  aria-label="Play product video"
+                  className={`relative aspect-square overflow-hidden rounded-[1rem] border p-1 transition ${
+                    showVideo ? "border-[var(--vr-primary)] bg-white shadow-[0_0_0_3px_rgba(30,58,138,0.1)]" : "border-[var(--vr-border)] bg-[var(--vr-surface-soft)]"
+                  }`}
+                >
+                  {images[0]?.imageUrl ? (
+                    <img src={images[0].imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full rounded-[0.8rem] object-contain bg-white p-2 opacity-70" />
+                  ) : (
+                    <div className="h-full w-full rounded-[0.8rem] bg-white" />
+                  )}
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-[0.8rem] bg-slate-950/35 text-white">
+                    <PlayCircle className="h-7 w-7 drop-shadow" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.18em]">Video</span>
+                  </div>
+                </button>
+              ) : null}
+            </div>
+          </Card>
         </section>
 
-        <aside className="xl:sticky xl:top-28 xl:h-fit">
+        <aside className="xl:sticky xl:top-[13rem] xl:h-fit">
           <Card className="p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip label={product.brandName ?? "VR Certified"} tone="muted" />
@@ -368,8 +414,16 @@ export function ProductDetailPage() {
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <Button icon={<ShoppingCart className="h-4 w-4" />} fullWidth size="lg" onClick={handleAddToCart} disabled={pendingCartAction !== null}>
-                {pendingCartAction === "cart" ? "Adding..." : "Add to Cart"}
+              <Button
+                icon={<ShoppingCart className="h-4 w-4" />}
+                fullWidth
+                size="lg"
+                onClick={handleAddToCart}
+                disabled={pendingCartAction !== null || !product.available}
+              >
+                {!product.available
+                  ? "Currently Unavailable"
+                  : pendingCartAction === "cart" ? "Adding..." : "Add to Cart"}
               </Button>
               <Button variant="accent" fullWidth size="lg" onClick={handleBuyNow} disabled={pendingCartAction !== null}>
                 {pendingCartAction === "buyNow" ? "Continuing..." : "Buy Now"}
@@ -394,11 +448,13 @@ export function ProductDetailPage() {
                     removeFromCompare(product.id);
                     toast("Removed from comparison");
                   } else {
-                    const added = addToCompare(product);
-                    if (added) {
+                    const result = addToCompare(product);
+                    if (result === "added") {
                       toast.success("Added to comparison — visit /compare to view");
-                    } else {
+                    } else if (result === "full") {
                       toast.error("You can compare up to 3 products at a time");
+                    } else if (result === "category-mismatch") {
+                      toast.error("Compare works within one category. Clear compare to switch.");
                     }
                   }
                 }}
@@ -823,6 +879,28 @@ export function ProductDetailPage() {
           ))}
         </div>
       </Card>
+
+      {relatedProducts.length ? (
+        <section>
+          <SectionHeader
+            eyebrow="Related Products"
+            title="Similar picks from this category"
+            description="Keep shoppers moving with alternatives that match the same buying intent."
+            action={
+              product.categoryId ? (
+                <Link to={`/products?categoryId=${product.categoryId}`} className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-primary)]">
+                  View category
+                </Link>
+              ) : undefined
+            }
+          />
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            {relatedProducts.map((item) => (
+              <ProductCard key={item.id} product={item} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <StickyMobileBar>
         <div className="flex items-center justify-between gap-3">

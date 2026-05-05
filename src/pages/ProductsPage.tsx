@@ -13,6 +13,7 @@ import { EmptyState } from "components/ui/EmptyState";
 import { FilterDrawer } from "components/ui/FilterDrawer";
 import { SectionHeader } from "components/ui/SectionHeader";
 import { SkeletonLoader } from "components/ui/SkeletonLoader";
+import { StaggerGrid, StaggerItem } from "components/ui/StaggerGrid";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { getApiErrorMessage } from "../utils/api";
 import { formatConditionLabel, formatCurrency, getProductDerivedRating, getProductMerchandisingScore } from "../utils/catalog";
@@ -26,6 +27,7 @@ import {
   parseCatalogPrice
 } from "../utils/catalogFilters";
 import { catalogApi } from "api/client";
+import { useSelectedStore } from "store/storeStore";
 import type { ProductCondition } from "types";
 
 type SortOption = "best-sellers" | "price-low" | "price-high" | "newest" | "highest-rated";
@@ -148,7 +150,17 @@ export function ProductsPage() {
 
   const brandsQuery = useQuery({ queryKey: ["brands"], queryFn: catalogApi.getBrands });
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: catalogApi.getCategories });
-  const catalogProductsQuery = useQuery({ queryKey: ["catalog-products"], queryFn: () => catalogApi.getProducts() });
+  const storesQuery = useQuery({ queryKey: ["stores"], queryFn: catalogApi.getStores });
+  const selectedStoreIdFromStore = useSelectedStore((state) => state.selectedStoreId);
+  const clearSelectedStore = useSelectedStore((state) => state.clearStore);
+  const storeIdParam = searchParams.get("storeId");
+  const urlStoreId = storeIdParam ? Number(storeIdParam) : undefined;
+  const activeStoreId = urlStoreId ?? selectedStoreIdFromStore ?? undefined;
+  const activeStore = storesQuery.data?.find((store) => store.id === activeStoreId);
+  const catalogProductsQuery = useQuery({
+    queryKey: ["catalog-products", activeStoreId ?? null],
+    queryFn: () => catalogApi.getProducts(activeStoreId ? { storeId: activeStoreId } : undefined)
+  });
 
   const brands = brandsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
@@ -288,35 +300,35 @@ export function ProductsPage() {
     }
 
     const nextParams = new URLSearchParams();
-    if (appliedFilters.q.trim()) {
-      nextParams.set("q", appliedFilters.q.trim());
+    if (filters.q.trim()) {
+      nextParams.set("q", filters.q.trim());
     }
-    if (appliedFilters.brandIds.length) {
-      const brandParamKey = appliedFilters.brandIds.length === 1 ? "brandId" : "brandIds";
-      nextParams.set(brandParamKey, appliedFilters.brandIds.join(","));
+    if (filters.brandIds.length) {
+      const brandParamKey = filters.brandIds.length === 1 ? "brandId" : "brandIds";
+      nextParams.set(brandParamKey, filters.brandIds.join(","));
     }
-    if (appliedFilters.categoryIds.length) {
-      const categoryParamKey = appliedFilters.categoryIds.length === 1 ? "categoryId" : "categoryIds";
-      nextParams.set(categoryParamKey, appliedFilters.categoryIds.join(","));
+    if (filters.categoryIds.length) {
+      const categoryParamKey = filters.categoryIds.length === 1 ? "categoryId" : "categoryIds";
+      nextParams.set(categoryParamKey, filters.categoryIds.join(","));
     }
-    if (appliedFilters.processorOptions.length) {
-      nextParams.set("processor", appliedFilters.processorOptions.join(","));
+    if (filters.processorOptions.length) {
+      nextParams.set("processor", filters.processorOptions.join(","));
     }
-    if (appliedFilters.ramOptions.length) {
-      nextParams.set("ram", appliedFilters.ramOptions.map((value) => `${value}gb`).join(","));
+    if (filters.ramOptions.length) {
+      nextParams.set("ram", filters.ramOptions.map((value) => `${value}gb`).join(","));
     }
-    if (appliedFilters.storageOptions.length) {
-      nextParams.set("storage", appliedFilters.storageOptions.map((value) => formatStorageOption(value).toLowerCase()).join(","));
+    if (filters.storageOptions.length) {
+      nextParams.set("storage", filters.storageOptions.map((value) => formatStorageOption(value).toLowerCase()).join(","));
     }
-    if (appliedFilters.conditions.length) {
-      nextParams.set("condition", appliedFilters.conditions.map((condition) => formatConditionLabel(condition).toLowerCase().replace(/\s+/g, "-")).join(","));
+    if (filters.conditions.length) {
+      nextParams.set("condition", filters.conditions.map((condition) => formatConditionLabel(condition).toLowerCase().replace(/\s+/g, "-")).join(","));
     }
-    if (appliedFilters.inStockOnly) {
+    if (filters.inStockOnly) {
       nextParams.set("availability", "in-stock");
     }
 
-    const minPrice = parseCatalogPrice(appliedFilters.minPrice);
-    const maxPrice = parseCatalogPrice(appliedFilters.maxPrice);
+    const minPrice = parseCatalogPrice(filters.minPrice);
+    const maxPrice = parseCatalogPrice(filters.maxPrice);
     if (typeof minPrice === "number" || typeof maxPrice === "number") {
       nextParams.set("price", `${minPrice ?? priceBounds.min}-${maxPrice ?? priceBounds.max}`);
     }
@@ -325,11 +337,15 @@ export function ProductsPage() {
       nextParams.set("sort", sortBy);
     }
 
+    if (urlStoreId) {
+      nextParams.set("storeId", String(urlStoreId));
+    }
+
     const nextSearch = nextParams.toString();
     if (nextSearch !== searchParams.toString()) {
       setSearchParams(nextParams, { replace: true });
     }
-  }, [appliedFilters, hasHydratedFilters, priceBounds.max, priceBounds.min, searchParams, setSearchParams, sortBy]);
+  }, [urlStoreId, filters, hasHydratedFilters, priceBounds.max, priceBounds.min, searchParams, setSearchParams, sortBy]);
 
   useEffect(() => {
     if (!hasHydratedFilters) {
@@ -354,6 +370,7 @@ export function ProductsPage() {
       brandIds: appliedFilters.brandIds.length > 1 ? appliedFilters.brandIds.join(",") : undefined,
       categoryId: appliedFilters.categoryIds.length === 1 ? appliedFilters.categoryIds[0] : undefined,
       categoryIds: appliedFilters.categoryIds.length > 1 ? appliedFilters.categoryIds.join(",") : undefined,
+      storeId: activeStoreId,
       processorOptions: appliedFilters.processorOptions.length ? appliedFilters.processorOptions.join(",") : undefined,
       ramOptions: appliedFilters.ramOptions.length ? appliedFilters.ramOptions.join(",") : undefined,
       storageOptions: appliedFilters.storageOptions.length ? appliedFilters.storageOptions.join(",") : undefined,
@@ -362,7 +379,7 @@ export function ProductsPage() {
       minPrice: parseCatalogPrice(appliedFilters.minPrice),
       maxPrice: parseCatalogPrice(appliedFilters.maxPrice)
     }),
-    [appliedFilters]
+    [activeStoreId, appliedFilters]
   );
 
   const productsQuery = useQuery({
@@ -394,6 +411,21 @@ export function ProductsPage() {
 
   const activeFilterLabels = useMemo(() => {
     const labels: Array<{ key: string; label: string; onRemove: () => void }> = [];
+
+    if (activeStore) {
+      labels.push({
+        key: `store-${activeStore.id}`,
+        label: `Store: ${activeStore.name}`,
+        onRemove: () => {
+          clearSelectedStore();
+          if (urlStoreId) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete("storeId");
+            setSearchParams(nextParams, { replace: true });
+          }
+        }
+      });
+    }
 
     if (filters.q.trim()) {
       labels.push({
@@ -476,7 +508,7 @@ export function ProductsPage() {
     }
 
     return labels;
-  }, [brands, categories, filters, priceBounds.max, priceBounds.min]);
+  }, [activeStore, brands, categories, clearSelectedStore, filters, priceBounds.max, priceBounds.min, searchParams, setSearchParams, urlStoreId]);
 
   const sortOptions: Array<{ value: SortOption; label: string }> = [
     { value: "best-sellers", label: "Best Sellers" },
@@ -547,15 +579,18 @@ export function ProductsPage() {
       ? activeCategory.name
       : activeBrand?.name
         ? `${activeBrand.name} Products`
-        : "All Products";
+        : activeStore?.name
+          ? `Products at ${activeStore.name}`
+          : "All Products";
+  const storeBadge = activeStore?.name ? `Available at ${activeStore.name}.` : null;
   const pageDescription = displayProducts.length
     ? activeBrand && activeCategory
-      ? `Showing ${activeCategory.name.toLowerCase()} products from ${activeBrand.name}.`
+      ? `Showing ${activeCategory.name.toLowerCase()} products from ${activeBrand.name}.${storeBadge ? ` ${storeBadge}` : ""}`
       : activeCategory?.name
-        ? `Showing only ${activeCategory.name.toLowerCase()} from the live catalog.`
+        ? `Showing only ${activeCategory.name.toLowerCase()} from the live catalog.${storeBadge ? ` ${storeBadge}` : ""}`
         : activeBrand?.name
-          ? `Showing only products from ${activeBrand.name}.`
-          : "Explore live inventory with sticky filters, product counts, URL-synced chips, and a cleaner mobile filtering flow."
+          ? `Showing only products from ${activeBrand.name}.${storeBadge ? ` ${storeBadge}` : ""}`
+          : storeBadge ?? "Explore live inventory with sticky filters, product counts, URL-synced chips, and a cleaner mobile filtering flow."
     : emptyResultsDescription;
   const firstError = brandsQuery.error ?? categoriesQuery.error ?? catalogProductsQuery.error ?? productsQuery.error ?? null;
 
@@ -642,6 +677,31 @@ export function ProductsPage() {
         <span className="text-[var(--vr-primary)]">{pageTitle}</span>
       </div>
 
+      {activeStore ? (
+        <Card className="border-[var(--vr-primary)] bg-[rgba(30,58,138,0.04)]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Branch view</div>
+              <div className="mt-1 text-base font-bold text-[var(--vr-text)]">
+                Showing products at {activeStore.name}, {activeStore.city}
+              </div>
+              <div className="mt-1 text-xs text-[var(--vr-muted)]">All categories — laptops, monitors, accessories — available from this branch.</div>
+            </div>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-2xl border border-[var(--vr-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--vr-text)]"
+              onClick={() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete("storeId");
+                setSearchParams(nextParams, { replace: true });
+              }}
+            >
+              View all branches
+            </button>
+          </div>
+        </Card>
+      ) : null}
+
       <div ref={gridTopRef}>
         <Card variant="hero">
           <SectionHeader
@@ -726,23 +786,42 @@ export function ProductsPage() {
               ))}
             </div>
           ) : displayProducts.length ? (
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <StaggerGrid className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {displayProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <StaggerItem key={product.id}>
+                  <ProductCard product={product} />
+                </StaggerItem>
               ))}
-            </div>
+            </StaggerGrid>
           ) : (
             <EmptyState
               eyebrow="No Products Found"
-              title="No products found"
-              description={emptyResultsDescription}
+              title={activeStore && filters.q.trim() ? `No "${filters.q.trim()}" matches at ${activeStore.name}` : "No products found"}
+              description={
+                activeStore && filters.q.trim()
+                  ? `Nothing matched at ${activeStore.name}. Search across all branches or pick a different branch.`
+                  : emptyResultsDescription
+              }
               action={
                 <div className="flex flex-wrap items-center justify-center gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--vr-muted)]">
-                    <Boxes className="h-4 w-4 text-[var(--vr-primary)]" />
-                    Try adjusting your filters
-                  </div>
-                  <button className={getButtonClassName({ variant: "primary" })} onClick={resetAllFilters}>
+                  {activeStore ? (
+                    <button
+                      className={getButtonClassName({ variant: "primary" })}
+                      onClick={() => {
+                        const nextParams = new URLSearchParams(searchParams);
+                        nextParams.delete("storeId");
+                        setSearchParams(nextParams, { replace: true });
+                      }}
+                    >
+                      Search all branches
+                    </button>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--vr-muted)]">
+                      <Boxes className="h-4 w-4 text-[var(--vr-primary)]" />
+                      Try adjusting your filters
+                    </div>
+                  )}
+                  <button className={getButtonClassName({ variant: activeStore ? "secondary" : "primary" })} onClick={resetAllFilters}>
                     Reset Filters
                   </button>
                 </div>

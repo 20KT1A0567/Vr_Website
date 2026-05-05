@@ -60,7 +60,7 @@ function isAuthRefreshBypassed(url?: string) {
   if (!url) {
     return false;
   }
-  return ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].some((path) => url.includes(path));
+  return ["/auth/login", "/auth/register", "/auth/phone/send", "/auth/phone/verify", "/auth/refresh", "/auth/logout"].some((path) => url.includes(path));
 }
 
 async function refreshAccessToken() {
@@ -128,16 +128,16 @@ const unwrap = async <T>(promise: Promise<{ data: ApiEnvelope<T> }>) => (await p
 type CatalogProductQueryParams = Record<string, string | number | boolean | undefined>;
 
 export const authApi = {
-  login: (payload: { email: string; password: string }) => unwrap<AuthUser>(api.post("/auth/login", payload)),
-  register: (payload: { name: string; email: string; password: string; phone?: string }) =>
-    unwrap<AuthUser>(api.post("/auth/register", payload)),
+  sendPhoneOtp: (phone: string) => unwrap<{ verificationId: string; sessionInfo: string; token: string }>(api.post("/auth/phone/send", { phone })),
+  verifyPhone: (idToken: string, sessionInfo?: string) => unwrap<AuthUser>(api.post("/auth/phone/verify", { idToken, sessionInfo })),
   me: () => unwrap<AuthUser>(api.get("/auth/me")),
   refresh: (refreshToken: string) => unwrap<AuthUser>(api.post("/auth/refresh", { refreshToken })),
   logout: (refreshToken: string) => unwrap(api.post("/auth/logout", { refreshToken }))
 };
 
 export const catalogApi = {
-  getBanners: () => unwrap<Banner[]>(api.get("/banners")),
+  getBanners: (placement?: string) =>
+    unwrap<Banner[]>(api.get("/banners", { params: placement ? { placement } : undefined })),
   getBrands: () => unwrap<Brand[]>(api.get("/brands")),
   getCategories: () => unwrap<Category[]>(api.get("/categories")),
   getHomeSections: () => unwrap<HomeSection[]>(api.get("/public/home-sections")),

@@ -148,7 +148,7 @@ export function FilterSidebar({
   }
 
   return (
-    <aside className={`${sticky ? "lg:sticky lg:top-28 lg:h-fit" : ""} ${className}`}>
+    <aside className={`${sticky ? "lg:sticky lg:top-[13rem] lg:h-fit" : ""} ${className}`}>
       <div className="rounded-[1.8rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>

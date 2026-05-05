@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
-import { Clock3, MapPin, MessageCircle, Navigation, PhoneCall, Star, Store as StoreIcon, Video } from "lucide-react";
+import { ChevronRight, Clock3, MapPin, MessageCircle, Navigation, PhoneCall, ShoppingBag, Star, Store as StoreIcon, Video } from "lucide-react";
 import { Link } from "react-router-dom";
 import { catalogApi } from "api/client";
 import { getButtonClassName } from "components/ui/Button";
@@ -219,6 +219,14 @@ export function StoresPage() {
 
               {/* Action buttons */}
               <div className="mt-5 flex flex-wrap gap-2.5">
+                <Link
+                  to={`/products?storeId=${store.id}`}
+                  className="inline-flex items-center gap-2 rounded-[1rem] bg-[var(--vr-primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--vr-primary-strong)]"
+                >
+                  <ShoppingBag className="h-4 w-4" />
+                  Shop this branch
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
                 {store.whatsapp ? (
                   <a href={`https://wa.me/${store.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
                     className="inline-flex items-center gap-2 rounded-[1rem] bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-600">
@@ -228,7 +236,7 @@ export function StoresPage() {
                 ) : null}
                 {store.mapLink ? (
                   <a href={store.mapLink} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-[1rem] bg-[var(--vr-primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--vr-primary-strong)]">
+                    className="inline-flex items-center gap-2 rounded-[1rem] border border-[var(--vr-border)] bg-white px-4 py-2.5 text-sm font-bold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)]">
                     <Navigation className="h-4 w-4" />
                     Directions
                   </a>

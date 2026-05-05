@@ -12,6 +12,7 @@ import { StickyMobileBar } from "components/ui/StickyMobileBar";
 import { useAuthStore } from "store/authStore";
 import { startOrderPayment } from "utils/orderPayment";
 import { getApiErrorMessage } from "../utils/api";
+import { formatCartUnitCount, getCartQuantityCount } from "../utils/cartCounts";
 import { formatCurrency } from "../utils/catalog";
 
 const GST_RATE = 0.18;
@@ -70,9 +71,9 @@ type CheckoutFormState = {
 
 const paymentOptions = [
   { value: "CASH", label: "Cash", description: "Pay at pickup or delivery", icon: Building2 },
-  { value: "UPI", label: "UPI", description: "Fast digital payment flow", icon: QrCode },
-  { value: "CARD", label: "Card", description: "Pay securely online", icon: CreditCard },
-  { value: "BANK_TRANSFER", label: "Bank Transfer", description: "Manual payment via bank transfer", icon: Landmark }
+  { value: "UPI", label: "UPI", description: "Pay securely with Razorpay UPI", icon: QrCode },
+  { value: "CARD", label: "Card", description: "Pay securely with Razorpay cards", icon: CreditCard },
+  { value: "BANK_TRANSFER", label: "Net Banking", description: "Pay securely with Razorpay banking", icon: Landmark }
 ] as const;
 
 const checkoutSteps = ["Cart", "Address", "Payment", "Review"] as const;
@@ -120,7 +121,8 @@ export function CheckoutPage() {
   }, [availableStores, form.storeId]);
 
   const selectedStore = availableStores.find((store) => String(store.id) === form.storeId);
-  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const totalItems = getCartQuantityCount(cart);
+  const unitCountLabel = formatCartUnitCount(totalItems);
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   const couponDiscount = useMemo(() => {
@@ -453,7 +455,7 @@ export function CheckoutPage() {
           </Card>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-28 lg:h-fit">
+        <aside className="space-y-4 lg:sticky lg:top-[13rem] lg:h-fit">
           <Card>
             <SectionHeader eyebrow="Review" title="Order summary" />
             <div className="mt-5 space-y-3">
@@ -472,7 +474,7 @@ export function CheckoutPage() {
 
             <div className="mt-5 rounded-[1.4rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4 text-sm text-[var(--vr-muted)]">
               <div className="flex items-center justify-between">
-                <span>Subtotal ({totalItems} items)</span>
+                <span>Subtotal ({unitCountLabel})</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
               {couponDiscount > 0 ? (
@@ -521,7 +523,7 @@ export function CheckoutPage() {
       <StickyMobileBar>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs text-[var(--vr-muted)]">{totalItems} items · incl. GST</div>
+            <div className="text-xs text-[var(--vr-muted)]">{unitCountLabel} · incl. GST</div>
             <div className="text-lg font-extrabold text-[var(--vr-text)]">{formatCurrency(total)}</div>
           </div>
           <Button

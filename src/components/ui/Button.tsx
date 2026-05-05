@@ -16,17 +16,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, Bu
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-[var(--vr-primary)] text-white shadow-[0_18px_35px_rgba(30,58,138,0.22)] hover:bg-[var(--vr-primary-strong)]",
-  secondary: "border border-[var(--vr-border)] bg-white text-[var(--vr-text)] hover:border-[var(--vr-primary)] hover:bg-[var(--vr-surface-soft)]",
-  accent: "bg-[var(--vr-accent)] text-[var(--vr-dark)] shadow-[0_18px_35px_rgba(245,158,11,0.22)] hover:bg-[#d97706]",
-  ghost: "border border-transparent bg-transparent text-[var(--vr-muted)] hover:bg-[var(--vr-surface-soft)] hover:text-[var(--vr-text)]",
-  danger: "border border-[rgba(220,38,38,0.14)] bg-[rgba(220,38,38,0.08)] text-[var(--vr-danger)] hover:bg-[rgba(220,38,38,0.14)]"
+  primary: "bg-[var(--vr-primary)] text-white hover:bg-[var(--vr-primary-strong)] shadow-sm hover:shadow-md",
+  secondary: "border border-[var(--vr-border-strong)] bg-white text-[var(--vr-text)] hover:bg-[var(--vr-surface-soft)] shadow-sm",
+  accent: "bg-[var(--vr-accent)] text-white hover:bg-blue-700 shadow-sm",
+  ghost: "bg-transparent text-[var(--vr-muted)] hover:bg-[var(--vr-surface-soft)] hover:text-[var(--vr-text)]",
+  danger: "bg-[var(--vr-danger)] text-white hover:bg-red-700 shadow-sm"
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "min-h-[2.5rem] rounded-xl px-3.5 text-sm",
-  md: "min-h-[2.875rem] rounded-2xl px-4.5 text-sm",
-  lg: "min-h-[3.25rem] rounded-2xl px-5.5 text-base"
+  sm: "h-9 rounded-xl px-3 text-xs",
+  md: "h-11 rounded-xl px-5 text-sm",
+  lg: "h-14 rounded-2xl px-8 text-base"
 };
 
 export function getButtonClassName({
@@ -36,7 +36,7 @@ export function getButtonClassName({
   className = ""
 }: ButtonClassOptions = {}) {
   return [
-    "inline-flex items-center justify-center gap-2 font-semibold transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60",
+    "inline-flex items-center justify-center gap-2 font-bold tracking-tight transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
     variantClasses[variant],
     sizeClasses[size],
     fullWidth ? "w-full" : "",

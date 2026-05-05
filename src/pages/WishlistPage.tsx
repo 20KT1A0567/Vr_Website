@@ -7,7 +7,9 @@ import toast from "react-hot-toast";
 import { customerApi } from "api/client";
 import { useWishlist } from "../hooks/useWishlist";
 import { useAuthStore } from "store/authStore";
+import type { Product } from "types";
 import { getApiErrorMessage } from "../utils/api";
+import { showCartToast } from "../utils/cartNotifications";
 import {
   formatCurrency,
   getProductPrimaryImage,
@@ -37,14 +39,15 @@ export function WishlistPage() {
     }
   }
 
-  async function handleAddToCart(productId: number) {
+  async function handleAddToCart(product: Product) {
     if (!user) { toast.error("Login to add items to cart"); return; }
+    const productId = product.id;
     if (addingToCart === productId) return;
     setAddingToCart(productId);
     try {
       const nextCart = await customerApi.addToCart(productId, 1);
       queryClient.setQueryData(["cart"], nextCart);
-      toast.success("Added to cart");
+      showCartToast({ variant: "added", productTitle: product.title, items: nextCart });
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to add to cart"));
     } finally {
@@ -159,7 +162,7 @@ export function WishlistPage() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => handleAddToCart(product.id)}
+                        onClick={() => handleAddToCart(product)}
                         disabled={isAddingThis}
                         className="inline-flex items-center gap-2 rounded-[1rem] bg-[var(--vr-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--vr-primary-strong)] disabled:opacity-60"
                       >

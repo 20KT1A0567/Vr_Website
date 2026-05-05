@@ -41,6 +41,8 @@ export function ProductImageZoom({ imageUrl, alt }: ProductImageZoomProps) {
         <img
           src={imageUrl}
           alt={alt}
+          loading="eager"
+          decoding="async"
           className="h-full w-full object-contain p-6 transition duration-150 ease-out"
           style={
             isZoomActive

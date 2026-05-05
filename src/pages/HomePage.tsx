@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { ArrowRight, CheckCircle2, Clock, Laptop2, MapPin, ShieldCheck, Sparkles, Star, Store, Truck, Undo2 } from "lucide-react";
@@ -10,6 +10,8 @@ import { EmptyState } from "components/ui/EmptyState";
 import { SectionHeader } from "components/ui/SectionHeader";
 import { SkeletonLoader } from "components/ui/SkeletonLoader";
 import { Badge } from "components/ui/Badge";
+import { BannerVideo } from "components/ui/BannerVideo";
+import { useSelectedStore } from "store/storeStore";
 import { catalogApi } from "api/client";
 import type { Category, Product } from "types";
 import { getApiErrorMessage } from "../utils/api";
@@ -33,6 +35,27 @@ const trustBar = [
   { title: "Quality Checked", subtitle: "Professionally tested before dispatch", icon: CheckCircle2 },
   { title: "Easy Returns", subtitle: "Simple return support from our team", icon: Undo2 },
   { title: "Fast Delivery", subtitle: "Pickup and delivery across branches", icon: Truck }
+] as const;
+
+const buyerAssurance = [
+  {
+    title: "Certified Refurbishment",
+    description: "Every listed machine is positioned around condition, warranty, and practical buyer-ready specs.",
+    stat: "100+ checks",
+    icon: CheckCircle2
+  },
+  {
+    title: "Store-Backed Support",
+    description: "Customers can see branch availability and contact support before they commit to checkout.",
+    stat: "Live stores",
+    icon: Store
+  },
+  {
+    title: "Clear Price Confidence",
+    description: "Discounts, original price, savings, and stock context stay visible across product cards.",
+    stat: "Transparent deals",
+    icon: Sparkles
+  }
 ] as const;
 
 const useCasePresets = [
@@ -152,14 +175,82 @@ function LoadingHomePage() {
   );
 }
 
+function CountUpStat({ value, suffix = "", decimals = 0 }: { value: number; suffix?: string; decimals?: number }) {
+  const nodeRef = useRef<HTMLSpanElement | null>(null);
+  const [displayValue, setDisplayValue] = useState(0);
+  const [hasStarted, setHasStarted] = useState(false);
+
+  useEffect(() => {
+    const node = nodeRef.current;
+    if (!node || hasStarted) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setHasStarted(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.45 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasStarted]);
+
+  useEffect(() => {
+    if (!hasStarted) {
+      return;
+    }
+
+    const duration = 1200;
+    const startedAt = performance.now();
+    let frameId = 0;
+
+    function tick(nowTime: number) {
+      const progress = Math.min((nowTime - startedAt) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(value * eased);
+
+      if (progress < 1) {
+        frameId = requestAnimationFrame(tick);
+      } else {
+        setDisplayValue(value);
+      }
+    }
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [decimals, hasStarted, value]);
+
+  const formattedValue = displayValue.toLocaleString("en-IN", {
+    maximumFractionDigits: decimals,
+    minimumFractionDigits: decimals
+  });
+
+  return (
+    <span ref={nodeRef}>
+      {formattedValue}
+      {suffix}
+    </span>
+  );
+}
+
 export function HomePage() {
   usePageMeta();
   const [now, setNow] = useState(() => Date.now());
   const { recentlyViewed, clearHistory } = useRecentlyViewed();
-  const bannersQuery = useQuery({ queryKey: ["banners"], queryFn: catalogApi.getBanners });
+  const bannersQuery = useQuery({ queryKey: ["banners"], queryFn: () => catalogApi.getBanners() });
+  const useCaseBannersQuery = useQuery({ queryKey: ["banners", "USE_CASE"], queryFn: () => catalogApi.getBanners("USE_CASE") });
   const homeSectionsQuery = useQuery({ queryKey: ["home-sections"], queryFn: catalogApi.getHomeSections });
-  const bestSellersQuery = useQuery({ queryKey: ["home-best-sellers"], queryFn: () => catalogApi.getBestSellers(6) });
-  const allProductsQuery = useQuery({ queryKey: ["home-products"], queryFn: () => catalogApi.getProducts() });
+  const selectedStoreId = useSelectedStore((state) => state.selectedStoreId);
+  const bestSellersQuery = useQuery({ queryKey: ["home-best-sellers", selectedStoreId], queryFn: () => catalogApi.getBestSellers(6) });
+  const allProductsQuery = useQuery({
+    queryKey: ["home-products", selectedStoreId],
+    queryFn: () => catalogApi.getProducts(selectedStoreId ? { storeId: selectedStoreId } : undefined)
+  });
   const categoriesQuery = useQuery({ queryKey: ["home-categories"], queryFn: catalogApi.getCategories });
   const storesQuery = useQuery({ queryKey: ["home-stores"], queryFn: catalogApi.getStores });
 
@@ -191,8 +282,29 @@ export function HomePage() {
     return groups;
   }, [allProducts]);
 
-  const heroBanner = banners[0];
   const heroCategory = orderedCategories.find((category) => category.name.toLowerCase().includes("laptop")) ?? orderedCategories[0];
+  const heroBanners = useMemo(
+    () => banners.filter((banner) => !banner.placement || banner.placement === "HOME_HERO"),
+    [banners]
+  );
+  const middleBanners = useMemo(
+    () => banners.filter((banner) => banner.placement === "HOME_MIDDLE"),
+    [banners]
+  );
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  useEffect(() => {
+    if (activeHeroIndex >= heroBanners.length) {
+      setActiveHeroIndex(0);
+    }
+  }, [activeHeroIndex, heroBanners.length]);
+  useEffect(() => {
+    if (heroBanners.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setActiveHeroIndex((index) => (index + 1) % heroBanners.length);
+    }, 6000);
+    return () => window.clearInterval(timer);
+  }, [heroBanners.length]);
+  const heroBanner = heroBanners[activeHeroIndex] ?? heroBanners[0];
   const heroTitle = isMeaningfulCatalogValue(heroBanner?.title)
     ? normalizeCatalogValue(heroBanner?.title)
     : "Certified Refurbished Laptops That Feel Premium and Cost Less";
@@ -274,6 +386,17 @@ export function HomePage() {
     () => (todaysDealProducts.length ? formatCountdown(getDealCountdownTarget(todaysDealProducts), now) : null),
     [now, todaysDealProducts]
   );
+  const trustedCustomerCount = Math.max(500, stores.reduce((sum, store) => sum + (store.googleReviewCount ?? 0), 0));
+  const averageStoreRating =
+    stores.length > 0
+      ? (stores.reduce((sum, store) => sum + (store.googleRating ?? 0), 0) / stores.length).toFixed(1)
+      : "4.8";
+  const homeTrustStats = [
+    { value: trustedCustomerCount, suffix: "+", label: "trusted customers", description: "Across walk-in, WhatsApp, and website enquiries." },
+    { value: stores.length || 4, suffix: "", label: "active stores", description: "Branch-backed pickup, support, and fulfillment." },
+    { value: allProducts.length || 75, suffix: "+", label: "ready products", description: "Refurbished laptops, desktops, accessories, and monitors." },
+    { value: Number(averageStoreRating), suffix: "/5", decimals: 1, label: "store rating", description: "Real branch trust signals shown near products." }
+  ];
 
   if (firstError) {
     return (
@@ -291,84 +414,157 @@ export function HomePage() {
     return <LoadingHomePage />;
   }
 
+  const heroHasMedia = Boolean(heroDesktopImage || heroVideoEmbedUrl || heroUsesDirectVideo);
+  const heroHasOverlayContent = !heroHasMedia && Boolean(
+    isMeaningfulCatalogValue(heroBanner?.title) || isMeaningfulCatalogValue(heroBanner?.subtitle) || !heroDesktopImage
+  );
+
   return (
     <div className="vr-page-shell space-y-6">
       <section className="overflow-hidden rounded-[2rem] border border-[var(--vr-border)] bg-white p-3 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
-        <div className="group relative overflow-hidden rounded-[1.7rem] bg-[linear-gradient(135deg,#edf4ff,#dbeafe_48%,#fff7ed)]">
-          {heroBanner?.mediaType === "VIDEO" && heroBanner.videoUrl ? (
-            heroUsesDirectVideo ? (
-              <video
-                src={heroBanner.videoUrl}
-                poster={heroDesktopImage}
-                className="absolute inset-0 h-full w-full object-cover opacity-[0.96]"
-                autoPlay
-                muted
-                loop
-                playsInline
-              />
-            ) : heroVideoEmbedUrl ? (
-              <iframe
-                src={`${heroVideoEmbedUrl}?autoplay=1&mute=1&controls=0&loop=1&playsinline=1&rel=0&modestbranding=1`}
-                title={heroTitle}
-                className="absolute inset-0 h-full w-full scale-[1.06] object-cover opacity-[0.96]"
-                allow="autoplay; encrypted-media; picture-in-picture"
-              />
-            ) : null
-          ) : heroDesktopImage ? (
-            <picture>
-              {heroMobileImage ? <source media="(max-width: 768px)" srcSet={heroMobileImage} /> : null}
-              <img src={heroDesktopImage} alt={heroTitle} className="absolute inset-0 h-full w-full object-cover opacity-[0.95]" />
-            </picture>
-          ) : null}
+        <Link to={heroLink} className="block">
+          <div
+            className={`group relative overflow-hidden rounded-[1.7rem] ${
+              heroHasOverlayContent
+                ? "bg-[linear-gradient(135deg,#edf4ff,#dbeafe_48%,#fff7ed)]"
+                : "bg-white"
+            }`}
+          >
+            {!heroHasOverlayContent ? <div className="aspect-[16/7] min-h-[260px] w-full sm:min-h-[340px] lg:min-h-[430px]" /> : null}
+            {heroBanner?.mediaType === "VIDEO" && heroBanner.videoUrl ? (
+              heroUsesDirectVideo ? (
+                <BannerVideo
+                  src={heroBanner.videoUrl}
+                  poster={heroDesktopImage}
+                  className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "opacity-[0.96]" : ""}`}
+                />
+              ) : heroVideoEmbedUrl ? (
+                <iframe
+                  src={`${heroVideoEmbedUrl}?autoplay=1&mute=1&controls=1&loop=1&playsinline=1&rel=0&modestbranding=1`}
+                  title={heroTitle}
+                  className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "scale-[1.06] opacity-[0.96]" : ""}`}
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                />
+              ) : null
+            ) : heroDesktopImage ? (
+              <picture>
+                {heroMobileImage ? <source media="(max-width: 768px)" srcSet={heroMobileImage} /> : null}
+                <img
+                  src={heroDesktopImage}
+                  alt={heroTitle}
+                  loading="eager"
+                  decoding="async"
+                  className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "opacity-[0.95]" : ""}`}
+                />
+              </picture>
+            ) : null}
 
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.88)_34%,rgba(248,250,252,0.35)_68%,rgba(255,255,255,0.08)_100%)]" />
-
-          <div className="relative z-10 grid min-h-[430px] items-end gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-9">
-            <div className="max-w-[620px]">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="accent" className="bg-[rgba(245,158,11,0.18)] text-[#b45309]">
-                  {heroBanner?.mediaType === "VIDEO" ? "Video Campaign Live" : "Premium Refurbished Picks"}
-                </Badge>
-                {heroCategory ? <Badge tone="primary">{heroCategory.name}</Badge> : null}
-              </div>
-              <h1 className="display-font mt-5 text-[2.3rem] font-extrabold leading-[1.02] text-[var(--vr-dark)] sm:text-[2.8rem] lg:text-[3.55rem]">
-                {heroTitle}
-              </h1>
-              <p className="mt-4 max-w-[520px] text-base leading-8 text-[var(--vr-muted)] lg:text-lg">{heroSubtitle}</p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                {heroLinkIsExternal ? (
-                  <a href={heroLink} target="_blank" rel="noreferrer" className={getButtonClassName({ variant: "primary", size: "lg" })}>
-                    {heroCtaLabel}
-                  </a>
-                ) : (
-                  <Link to={heroLink} className={getButtonClassName({ variant: "primary", size: "lg" })}>
-                    {heroCtaLabel}
-                  </Link>
-                )}
-                <Link to="/products" className={getButtonClassName({ variant: "secondary", size: "lg" })}>
-                  Explore best sellers
-                </Link>
-              </div>
-            </div>
-
-            <div className="grid gap-3 self-end sm:grid-cols-2">
-              {trustBar.map((item) => (
-                <div key={item.title} className="rounded-[1.4rem] border border-white/60 bg-white/78 p-4 shadow-[0_18px_34px_rgba(15,23,42,0.06)] backdrop-blur">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-2.5 text-[var(--vr-primary)]">
-                      <item.icon className="h-4 w-4" />
+            {heroHasOverlayContent ? (
+              <>
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.88)_34%,rgba(248,250,252,0.35)_68%,rgba(255,255,255,0.08)_100%)]" />
+                <div className="relative z-10 grid min-h-[430px] items-end gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-9">
+                  <div className="max-w-[620px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="accent" className="bg-[rgba(245,158,11,0.18)] text-[#b45309]">
+                        {heroBanner?.mediaType === "VIDEO" ? "Video Campaign Live" : "Premium Refurbished Picks"}
+                      </Badge>
+                      {heroCategory ? <Badge tone="primary">{heroCategory.name}</Badge> : null}
                     </div>
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--vr-text)]">{item.title}</div>
-                      <div className="mt-1 text-xs text-[var(--vr-muted)]">{item.subtitle}</div>
+                    <h1 className="display-font mt-5 text-[2.3rem] font-extrabold leading-[1.02] text-[var(--vr-dark)] sm:text-[2.8rem] lg:text-[3.55rem]">
+                      {heroTitle}
+                    </h1>
+                    {heroSubtitle ? (
+                      <p className="mt-4 max-w-[520px] text-base leading-8 text-[var(--vr-muted)] lg:text-lg">{heroSubtitle}</p>
+                    ) : null}
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      <span className={getButtonClassName({ variant: "primary", size: "lg" })}>
+                        {heroCtaLabel}
+                      </span>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </>
+            ) : null}
+
+            {heroBanners.length > 1 ? (
+              <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
+                {heroBanners.map((banner, index) => (
+                  <button
+                    key={banner.id ?? index}
+                    type="button"
+                    aria-label={`Show banner ${index + 1}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setActiveHeroIndex(index);
+                    }}
+                    className={`h-2 rounded-full transition-all ${
+                      index === activeHeroIndex
+                        ? "w-6 bg-[var(--vr-primary)]"
+                        : "w-2 bg-white/70 hover:bg-white"
+                    }`}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
-        </div>
+        </Link>
       </section>
+
+      {middleBanners.length > 0 ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          {middleBanners.map((banner) => {
+            const target = resolveBannerLink(banner.linkUrl, "/products");
+            const targetIsExternal = target.startsWith("http");
+            const desktopImage = banner.desktopImageUrl ?? banner.imageUrl;
+            const mobileImage = banner.mobileImageUrl ?? desktopImage;
+            const usesDirectVideo = banner.mediaType === "VIDEO" && isDirectVideoUrl(banner.videoUrl);
+            const videoEmbedUrl = getVideoEmbedUrl(banner.videoUrl);
+            const inner = (
+              <div className="group relative overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] shadow-[0_14px_32px_rgba(15,23,42,0.08)]">
+                <div className="relative aspect-[16/7] w-full overflow-hidden">
+                  {banner.mediaType === "VIDEO" && banner.videoUrl ? (
+                    usesDirectVideo ? (
+                      <BannerVideo
+                        src={banner.videoUrl}
+                        poster={desktopImage}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : videoEmbedUrl ? (
+                      <iframe
+                        src={`${videoEmbedUrl}?autoplay=1&mute=1&controls=1&loop=1&playsinline=1&rel=0&modestbranding=1`}
+                        title={banner.title ?? "Banner"}
+                        className="h-full w-full object-cover"
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                      />
+                    ) : null
+                  ) : desktopImage ? (
+                    <picture>
+                      {mobileImage ? <source media="(max-width: 768px)" srcSet={mobileImage} /> : null}
+                      <img src={desktopImage} alt={banner.title ?? "Banner"} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                    </picture>
+                  ) : null}
+                  <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0)_45%,rgba(15,23,42,0.65)_100%)]" />
+                </div>
+                <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+                  {banner.title ? <h3 className="text-lg font-bold drop-shadow">{banner.title}</h3> : null}
+                  {banner.subtitle ? <p className="mt-1 max-w-[80%] text-xs leading-5 text-white/85">{banner.subtitle}</p> : null}
+                  {banner.ctaText ? (
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[var(--vr-primary)]">
+                      {banner.ctaText} <ArrowRight className="h-3 w-3" />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+            return targetIsExternal ? (
+              <a key={banner.id} href={target} target="_blank" rel="noreferrer">{inner}</a>
+            ) : (
+              <Link key={banner.id} to={target}>{inner}</Link>
+            );
+          })}
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {categoryCards.map(({ category, previewImage }) => (
@@ -512,7 +708,7 @@ export function HomePage() {
       <section>
         <SectionHeader
           eyebrow="New Arrivals"
-          title={newArrivalsSection?.title ?? "Fresh arrivals — just in"}
+          title={newArrivalsSection?.title ?? "Fresh arrivals - just in"}
           action={
             <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
               View All <ArrowRight className="h-4 w-4" />
@@ -560,7 +756,7 @@ export function HomePage() {
                 <div className="flex flex-1 flex-col justify-between p-3">
                   <div className="text-xs font-semibold leading-tight text-[var(--vr-text)] line-clamp-2">{product.title}</div>
                   <div className="mt-2 text-sm font-extrabold text-[var(--vr-primary)]">
-                    ₹{product.price.toLocaleString("en-IN")}
+                    {formatCurrency(product.price)}
                   </div>
                 </div>
               </Link>
@@ -574,23 +770,66 @@ export function HomePage() {
           eyebrow="Shop by Use Case"
           title="Find the right machine for you"
         />
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {useCasePresets.map((item) => (
-            <Link key={item.title} to={item.link}>
-              <Card className="vr-card-lift h-full">
-                <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-3 text-[var(--vr-primary)] w-fit">
-                  <item.icon className="h-5 w-5" />
-                </div>
-                <h3 className="mt-4 text-xl font-bold text-[var(--vr-text)]">{item.title}</h3>
-                <p className="mt-3 text-sm leading-7 text-[var(--vr-muted)]">{item.description}</p>
-                <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
-                  Explore
-                  <ArrowRight className="h-4 w-4" />
-                </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        {useCaseBannersQuery.data && useCaseBannersQuery.data.length > 0 ? (
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {useCaseBannersQuery.data.map((banner) => {
+              const target = resolveBannerLink(banner.linkUrl, "/products");
+              const targetIsExternal = target.startsWith("http");
+              const cardBody = (
+                <Card className="vr-card-lift h-full overflow-hidden">
+                  {banner.desktopImageUrl || banner.imageUrl ? (
+                    <div className="-mx-5 -mt-5 mb-4 h-32 overflow-hidden rounded-t-[1.4rem] bg-[var(--vr-surface-soft)]">
+                      <img
+                        src={banner.desktopImageUrl ?? banner.imageUrl}
+                        alt={banner.title ?? "Use case"}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-3 text-[var(--vr-primary)] w-fit">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                  )}
+                  <h3 className="mt-2 text-xl font-bold text-[var(--vr-text)]">{banner.title ?? "Curated picks"}</h3>
+                  {banner.subtitle ? (
+                    <p className="mt-3 text-sm leading-7 text-[var(--vr-muted)]">{banner.subtitle}</p>
+                  ) : null}
+                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
+                    {banner.ctaText && banner.ctaText.trim() ? banner.ctaText : "Explore"}
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+                </Card>
+              );
+              return targetIsExternal ? (
+                <a key={banner.id ?? `${banner.title}-${banner.linkUrl}`} href={target} target="_blank" rel="noreferrer">
+                  {cardBody}
+                </a>
+              ) : (
+                <Link key={banner.id ?? `${banner.title}-${banner.linkUrl}`} to={target}>
+                  {cardBody}
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {useCasePresets.map((item) => (
+              <Link key={item.title} to={item.link}>
+                <Card className="vr-card-lift h-full">
+                  <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-3 text-[var(--vr-primary)] w-fit">
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-xl font-bold text-[var(--vr-text)]">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-7 text-[var(--vr-muted)]">{item.description}</p>
+                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
+                    Explore
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>
@@ -648,6 +887,64 @@ export function HomePage() {
             </Card>
           ))}
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {homeTrustStats.map((item) => (
+            <div key={item.label} className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+              <div className="display-font text-3xl font-extrabold text-[var(--vr-primary)]">
+                <CountUpStat value={item.value} suffix={item.suffix} decimals={item.decimals ?? 0} />
+              </div>
+              <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--vr-text)]">{item.label}</div>
+              <p className="mt-2 text-xs leading-6 text-[var(--vr-muted)]">{item.description}</p>
+            </div>
+          ))}
+        </div>
+
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {trustBar.map((item) => (
+            <div key={item.title} className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.05)]">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-2.5 text-[var(--vr-primary)]">
+                  <item.icon className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-[var(--vr-text)]">{item.title}</div>
+                  <div className="mt-1 text-xs text-[var(--vr-muted)]">{item.subtitle}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+
+        <section className="overflow-hidden rounded-[1.9rem] border border-[rgba(30,58,138,0.14)] bg-[linear-gradient(135deg,#0f172a,#1e3a8a)] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.16)] lg:p-7">
+          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr] xl:items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#fde68a]">
+                Publish-ready shopping
+              </div>
+              <h2 className="display-font mt-4 text-3xl font-extrabold leading-tight lg:text-[2.7rem]">
+                More confidence before every add to cart.
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-7 text-white/72 lg:text-base">
+                Buyers get a clearer reason to trust refurbished products: service, stores, pricing, and product condition stay connected from homepage to detail page.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {buyerAssurance.map((item) => (
+                <div key={item.title} className="rounded-[1.35rem] border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/12 text-[#fde68a]">
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-[#fde68a]">{item.stat}</div>
+                  <h3 className="mt-2 text-base font-bold text-white">{item.title}</h3>
+                  <p className="mt-2 text-xs leading-6 text-white/66">{item.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
       </section>
     </div>
   );

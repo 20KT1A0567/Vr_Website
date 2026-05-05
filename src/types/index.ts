@@ -17,7 +17,7 @@ export type OrderStatus = "PENDING" | "CONFIRMED" | "PACKED" | "SHIPPED" | "READ
 export type PaymentGateway = "OFFLINE" | "RAZORPAY";
 export type PaymentTransactionStatus = "CREATED" | "AUTHORIZED" | "CAPTURED" | "FAILED" | "REFUNDED" | "CANCELLED";
 export type BannerMediaType = "IMAGE" | "VIDEO";
-export type BannerPlacement = "HOME_HERO" | "HOME_MIDDLE" | "CATEGORY" | "PRODUCT_DETAIL";
+export type BannerPlacement = "HOME_HERO" | "HOME_MIDDLE" | "CATEGORY" | "PRODUCT_DETAIL" | "USE_CASE";
 export type ProductSectionType =
   | "BEST_SELLERS"
   | "TODAYS_DEALS"
@@ -91,6 +91,7 @@ export interface Category {
   name: string;
   slug: string;
   iconUrl?: string;
+  compareFields?: string;
 }
 
 export interface Store {

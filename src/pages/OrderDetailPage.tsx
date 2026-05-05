@@ -273,7 +273,7 @@ export function OrderDetailPage() {
           </Card>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-28 lg:h-fit">
+        <aside className="space-y-4 lg:sticky lg:top-[13rem] lg:h-fit">
           <Card>
             <SectionHeader eyebrow="Summary" title="Order snapshot" />
             <div className="mt-5 space-y-3 text-sm text-[var(--vr-muted)]">

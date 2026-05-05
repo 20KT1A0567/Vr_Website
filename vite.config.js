@@ -9,6 +9,7 @@ export default defineConfig(function (_a) {
             alias: {
                 api: "/src/api",
                 components: "/src/components",
+                lib: "/src/lib",
                 pages: "/src/pages",
                 store: "/src/store",
                 styles: "/src/styles",

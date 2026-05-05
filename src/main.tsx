@@ -18,7 +18,34 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         }}
       >
         <App />
-        <Toaster position="top-right" />
+        <Toaster
+          position="top-right"
+          gutter={12}
+          toastOptions={{
+            duration: 3600,
+            style: {
+              border: "1px solid var(--vr-border)",
+              borderRadius: "18px",
+              boxShadow: "0 18px 45px rgba(15, 23, 42, 0.16)",
+              color: "var(--vr-text)",
+              fontWeight: 700,
+              padding: "13px 15px"
+            },
+            success: {
+              iconTheme: {
+                primary: "var(--vr-success)",
+                secondary: "#ffffff"
+              }
+            },
+            error: {
+              duration: 4600,
+              iconTheme: {
+                primary: "var(--vr-danger)",
+                secondary: "#ffffff"
+              }
+            }
+          }}
+        />
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

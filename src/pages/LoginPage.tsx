@@ -1,10 +1,14 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { CheckCircle2, ShieldCheck, Truck, Undo2 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { authApi } from "api/client";
 import { useAuthStore } from "store/authStore";
 import { getApiErrorMessage } from "../utils/api";
+import { mergeGuestDataAfterLogin } from "../utils/mergeGuestData";
+import { getRecaptcha, resetRecaptcha, sendOtp, type ConfirmationResult } from "lib/firebase";
 
 const loginHighlights = [
   { title: "6 Months Warranty", subtitle: "On all products", icon: ShieldCheck },
@@ -13,22 +17,130 @@ const loginHighlights = [
   { title: "Fast Delivery", subtitle: "Across Hyderabad", icon: Truck }
 ] as const;
 
+const RECAPTCHA_CONTAINER_ID = "vr-recaptcha-container";
+
+function mapFirebaseError(code: string | undefined, fallback: string) {
+  switch (code) {
+    case "auth/invalid-phone-number":
+      return "That phone number doesn't look right. Check the digits and try again.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a few minutes before trying again.";
+    case "auth/code-expired":
+      return "That OTP has expired. Request a new one.";
+    case "auth/invalid-verification-code":
+      return "Incorrect OTP. Check the code and try again.";
+    case "auth/missing-phone-number":
+      return "Please enter your phone number.";
+    case "auth/network-request-failed":
+      return "Network error. Check your connection and retry.";
+    default:
+      return fallback;
+  }
+}
+
 export function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
+  const sessionInfoRef = useRef<string | null>(null);
   const setUser = useAuthStore((state) => state.setUser);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    return () => {
+      resetRecaptcha();
+    };
+  }, []);
+
+  const phoneE164 = `+91${phone.replace(/\D/g, "")}`;
+
+  async function handleSendOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
+    if (phone.replace(/\D/g, "").length !== 10) {
+      toast.error("Enter a valid 10-digit mobile number.");
+      return;
+    }
+    setLoading(true);
     try {
-      const user = await authApi.login({ email, password });
+      const verifier = getRecaptcha(RECAPTCHA_CONTAINER_ID);
+      confirmationRef.current = await sendOtp(phoneE164, verifier);
+      
+      try {
+        const backendOtpResponse = await authApi.sendPhoneOtp(phoneE164);
+        sessionInfoRef.current = backendOtpResponse.sessionInfo;
+      } catch (backendError) {
+        console.warn("Backend OTP registration failed, proceeding with Firebase only:", backendError);
+      }
+
+      toast.success(`OTP sent to ${phoneE164}`);
+      setStep("otp");
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      toast.error(mapFirebaseError(code, "Could not send OTP. Try again."));
+      resetRecaptcha();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerifyOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!confirmationRef.current) {
+      toast.error("Please request a fresh OTP.");
+      setStep("phone");
+      return;
+    }
+    if (otp.length !== 6) {
+      toast.error("Enter the 6-digit OTP.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await confirmationRef.current.confirm(otp);
+      const idToken = await result.user.getIdToken();
+      const user = await authApi.verifyPhone(idToken, sessionInfoRef.current ?? undefined);
       setUser(user);
-      toast.success("Welcome back");
+      try {
+        await mergeGuestDataAfterLogin(queryClient);
+      } catch {
+        // merge errors must not block login
+      }
+      toast.success("Welcome to Anusha Bazaar");
       navigate("/");
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, "Login failed"));
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      toast.error(mapFirebaseError(code, getApiErrorMessage(error, "Login failed")));
+      setShakeKey((value) => value + 1);
+      setOtp("");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleChangeNumber() {
+    confirmationRef.current = null;
+    setOtp("");
+    setStep("phone");
+    resetRecaptcha();
+  }
+
+  async function handleResendOtp() {
+    if (loading) return;
+    setLoading(true);
+    try {
+      resetRecaptcha();
+      const verifier = getRecaptcha(RECAPTCHA_CONTAINER_ID);
+      confirmationRef.current = await sendOtp(phoneE164, verifier);
+      toast.success("New OTP sent.");
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      toast.error(mapFirebaseError(code, "Could not resend OTP."));
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -37,50 +149,84 @@ export function LoginPage() {
       <div className="store-dark-panel overflow-hidden">
         <div className="grid lg:grid-cols-[0.92fr_1.08fr]">
           <div className="border-b border-[rgba(30,58,138,0.08)] p-8 lg:border-b-0 lg:border-r lg:p-10">
-            <div className="flex gap-2 rounded-xl border border-[rgba(30,58,138,0.12)] bg-[#f8fbff] p-1">
-              <Link to="/login" className="flex-1 rounded-lg bg-[#1e3a8a] px-4 py-2.5 text-center text-sm font-semibold text-white">
-                Login
-              </Link>
-              <Link to="/register" className="flex-1 rounded-lg px-4 py-2.5 text-center text-sm font-semibold text-slate-500 transition hover:text-[#1e3a8a]">
-                Register
-              </Link>
+            <div className="store-kicker">Sign in</div>
+
+            <div className="mt-6">
+              <h1 className="text-3xl font-bold text-slate-950">
+                {step === "phone" ? "Login with your mobile" : "Verify OTP"}
+              </h1>
+              <p className="mt-2 text-slate-600">
+                {step === "phone"
+                  ? "We'll send a one-time password to your phone. New here? Your account is created automatically."
+                  : `Enter the 6-digit code sent to ${phoneE164}.`}
+              </p>
             </div>
 
-            <div className="mt-8">
-              <h1 className="text-3xl font-bold text-slate-950">Welcome Back!</h1>
-              <p className="mt-2 text-slate-600">Login to continue shopping with branch-aware checkout and order tracking.</p>
-            </div>
+            {step === "phone" ? (
+              <form className="mt-8 space-y-4" onSubmit={handleSendOtp}>
+                <label className="store-field flex items-center gap-2 !py-0 !pr-2 cursor-text">
+                  <span className="select-none font-semibold text-slate-700">+91</span>
+                  <input
+                    type="tel"
+                    className="flex-1 border-0 bg-transparent py-3 text-sm outline-none focus:ring-0"
+                    placeholder="10-digit mobile number"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value.replace(/\D/g, ""))}
+                    autoFocus
+                  />
+                </label>
+                <button className="store-primary-btn w-full py-4 text-base" disabled={loading}>
+                  {loading ? "Sending OTP..." : "Send OTP"}
+                </button>
+              </form>
+            ) : (
+              <form className="mt-8 space-y-4" onSubmit={handleVerifyOtp}>
+                <motion.div
+                  key={shakeKey}
+                  animate={shakeKey === 0 ? { x: 0 } : { x: [0, -10, 10, -8, 8, -4, 4, 0] }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <input
+                    className="store-field tracking-[0.4em] text-center text-lg"
+                    placeholder="6-digit OTP"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))}
+                    autoFocus
+                  />
+                </motion.div>
+                <div className="flex justify-between text-sm">
+                  <button
+                    type="button"
+                    className="font-semibold text-[#1e3a8a]"
+                    onClick={handleChangeNumber}
+                    disabled={loading}
+                  >
+                    Change number
+                  </button>
+                  <button
+                    type="button"
+                    className="font-semibold text-[#1e3a8a]"
+                    onClick={handleResendOtp}
+                    disabled={loading}
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+                <button className="store-primary-btn w-full py-4 text-base" disabled={loading}>
+                  {loading ? "Verifying..." : "Verify & Continue"}
+                </button>
+              </form>
+            )}
 
-            <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
-              <input className="store-field" placeholder="Enter your email or mobile number" value={email} onChange={(event) => setEmail(event.target.value)} />
-              <input
-                className="store-field"
-                placeholder="Enter your password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              <div className="text-right text-sm text-[#1e3a8a]">Forgot password?</div>
-              <button className="store-primary-btn w-full py-4 text-base">Login</button>
-            </form>
-
-            <div className="mt-6 flex items-center gap-4 text-sm text-slate-400">
-              <div className="h-px flex-1 bg-[rgba(30,58,138,0.1)]" />
-              Continue with
-              <div className="h-px flex-1 bg-[rgba(30,58,138,0.1)]" />
-            </div>
-
-            <div className="mt-5 flex gap-3">
-              <button className="store-secondary-btn w-full">Google</button>
-              <button className="store-secondary-btn w-full">Facebook</button>
-            </div>
-
-            <p className="mt-6 text-center text-sm text-slate-500">
-              New here?{" "}
-              <Link to="/register" className="font-semibold text-[#1e3a8a]">
-                Create an account
-              </Link>
+            <p className="mt-6 text-center text-xs text-slate-500">
+              By continuing you agree to our terms of service and privacy policy.
             </p>
+
+            <div id={RECAPTCHA_CONTAINER_ID} className="mt-4" />
           </div>
 
           <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.2),transparent_38%),linear-gradient(135deg,#eff5ff,#dce8ff)] p-8 lg:p-10">

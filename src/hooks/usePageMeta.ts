@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const BASE_TITLE = "VR Technologies — Refurbished Laptops & Desktops in Hyderabad";
+const BASE_TITLE = "VR Technologies - Refurbished Laptops & Desktops in Hyderabad";
 const BASE_DESCRIPTION =
   "Buy certified refurbished laptops, desktops, and accessories in Hyderabad with 6-month warranty, quality checks, and 7-day easy returns. Multiple store locations.";
 

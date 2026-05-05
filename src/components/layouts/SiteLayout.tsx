@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   BarChart2,
   Building2,
+  Check,
   ChevronDown,
   CreditCard,
   Heart,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { authApi, catalogApi, customerApi } from "api/client";
 import { Button, getButtonClassName } from "components/ui/Button";
@@ -35,6 +37,10 @@ import { Badge } from "components/ui/Badge";
 import { CompareBar } from "components/catalog/CompareBar";
 import type { Brand, Category, Product, ProductCondition, Store } from "types";
 import { useAuthStore } from "store/authStore";
+import { useCartStore } from "store/cartStore";
+import { useSelectedStore } from "store/storeStore";
+import { StoreSelectorModal } from "components/ui/StoreSelectorModal";
+import { formatCartItemCount, getCartItemCount } from "utils/cartCounts";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { formatCurrency, getBrandLink, getBrandQueryValue, getCategoryLink, getCategoryQueryValue, normalizeCatalogValue } from "../../utils/catalog";
 import { matchesCatalogFilters, type CatalogFilterState } from "../../utils/catalogFilters";
@@ -64,20 +70,22 @@ const mobileBottomLinks = [
 
 const footerSupportLinks = [
   { label: "Track Order", to: "/orders" },
-  { label: "Returns and Refunds", to: "/contact" },
-  { label: "Warranty Support", to: "/contact" },
+  { label: "Returns and Refunds", to: "/returns" },
+  { label: "Warranty Support", to: "/warranty" },
   { label: "Store Locations", to: "/stores" }
 ] as const;
 
 const footerPolicyLinks = [
-  { label: "Privacy Policy", to: "/contact" },
-  { label: "Terms and Conditions", to: "/contact" },
-  { label: "Shipping Policy", to: "/contact" },
+  { label: "About VR Technologies", to: "/about" },
+  { label: "Privacy Policy", to: "/privacy" },
+  { label: "Terms and Conditions", to: "/terms" },
+  { label: "Shipping Policy", to: "/shipping" },
   { label: "Contact Us", to: "/contact" }
 ] as const;
 
 const preferredCategoryOrder = ["Laptops", "Desktops", "Accessories", "Monitors", "Gaming Laptops", "MacBooks", "Workstations"];
 const LOCATION_STORAGE_KEY = "vrtech-current-location";
+const LOCATION_PROMPT_DISMISSED_KEY = "vrtech-location-prompt-dismissed";
 
 function sortCategories(categories: Category[]) {
   return [...categories].sort((left, right) => {
@@ -129,7 +137,7 @@ async function resolveLocationLabel(latitude: number, longitude: number) {
     const region = payload.address?.state;
     return [locality, region].filter(Boolean).join(", ") || "Current location";
   } catch {
-    return "Current location";
+    return `Current location (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`;
   }
 }
 
@@ -213,8 +221,10 @@ export function SiteLayout() {
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const discoveryMenuRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoSearchRef = useRef(false);
+  const internalNavRef = useRef(false);
 
   const { data: cart = [] } = useQuery({ queryKey: ["cart"], queryFn: customerApi.getCart, enabled: Boolean(user) });
+  const guestCart = useCartStore((state) => state.guestCart);
   const { data: categories = [] } = useQuery({ queryKey: ["header-categories"], queryFn: catalogApi.getCategories });
   const { data: brands = [] } = useQuery({ queryKey: ["header-brands"], queryFn: catalogApi.getBrands });
   const { data: stores = [] } = useQuery({ queryKey: ["header-stores"], queryFn: catalogApi.getStores });
@@ -224,14 +234,33 @@ export function SiteLayout() {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [activeDiscoveryMenu, setActiveDiscoveryMenu] = useState<"products" | "brands" | null>(null);
   const [currentLocationLabel, setCurrentLocationLabel] = useState("");
+  const [showLocationPrompt, setShowLocationPrompt] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isStoreSelectorOpen, setIsStoreSelectorOpen] = useState(false);
+  const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
+  const storeMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectedStoreId = useSelectedStore((state) => state.selectedStoreId);
+  const selectedStoreName = useSelectedStore((state) => state.selectedStoreName);
+  const selectedStorePlace = useSelectedStore((state) => state.selectedStorePlace);
+  const pickStore = useSelectedStore((state) => state.pickStore);
+  const clearSelectedStore = useSelectedStore((state) => state.clearStore);
+  const headerPillCaption = selectedStoreName ? "Shopping at" : "Pick a store";
+  const headerPillName = selectedStoreName ?? "All branches";
+  const headerPillPlace = selectedStoreName ? selectedStorePlace ?? "Hyderabad" : "Hyderabad";
   const debouncedHeaderSearch = useDebouncedValue(headerSearch, 350);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (internalNavRef.current) {
+      internalNavRef.current = false;
+      return;
+    }
     if (location.pathname === "/products") {
-      setHeaderSearch(new URLSearchParams(location.search).get("q") ?? "");
+      const urlQuery = new URLSearchParams(location.search).get("q") ?? "";
+      setHeaderSearch((current) => (current === urlQuery ? current : urlQuery));
+    } else {
+      setHeaderSearch((current) => (current === "" ? current : ""));
     }
   }, [location.pathname, location.search]);
 
@@ -247,6 +276,7 @@ export function SiteLayout() {
       setCurrentLocationLabel(savedLocation);
     }
   }, []);
+
 
   useEffect(() => {
     function handlePointerDownSearch(event: MouseEvent) {
@@ -269,13 +299,18 @@ export function SiteLayout() {
       if (accountMenuRef.current && !accountMenuRef.current.contains(target)) {
         setIsAccountMenuOpen(false);
       }
+
+      if (storeMenuRef.current && !storeMenuRef.current.contains(target)) {
+        setIsStoreMenuOpen(false);
+      }
     }
 
     window.addEventListener("mousedown", handlePointerDown);
     return () => window.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartCount = getCartItemCount(user ? cart : guestCart);
+  const cartCountLabel = cartCount ? formatCartItemCount(cartCount) : "View Cart";
   const orderedCategories = useMemo(() => sortCategories(categories), [categories]);
   const quickCategories = useMemo(() => orderedCategories.slice(0, 8), [orderedCategories]);
   const orderedBrands = useMemo(() => [...brands].sort((left, right) => left.name.localeCompare(right.name)), [brands]);
@@ -289,9 +324,18 @@ export function SiteLayout() {
   const isBrandsPage = location.pathname === "/brands";
   const currentCatalogSearch = isProductsPage ? location.search : "";
   const currentCatalogParams = useMemo(() => new URLSearchParams(currentCatalogSearch), [currentCatalogSearch]);
+  const activeStoreId = useMemo(() => {
+    const value = currentCatalogParams.get("storeId");
+    const parsed = value ? Number(value) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [currentCatalogParams]);
+  const activeStore = useMemo(
+    () => (activeStoreId ? stores.find((store) => store.id === activeStoreId) ?? null : null),
+    [activeStoreId, stores]
+  );
   const { data: discoveryProducts = [] } = useQuery({
-    queryKey: ["header-discovery-products"],
-    queryFn: () => catalogApi.getProducts()
+    queryKey: ["header-discovery-products", activeStoreId ?? null],
+    queryFn: () => catalogApi.getProducts(activeStoreId ? { storeId: activeStoreId } : undefined)
   });
 
   const activeBrandIds = useMemo(() => {
@@ -413,6 +457,7 @@ export function SiteLayout() {
     }
 
     const nextSearch = nextParams.toString();
+    internalNavRef.current = true;
     navigate(nextSearch ? `/products?${nextSearch}` : "/products");
   }
 
@@ -450,6 +495,7 @@ export function SiteLayout() {
 
     shouldAutoSearchRef.current = false;
     if (nextTarget !== currentTarget) {
+      internalNavRef.current = true;
       navigate(nextTarget, { replace: true });
     }
   }, [debouncedHeaderSearch, isProductsPage, location.pathname, location.search, navigate]);
@@ -457,11 +503,13 @@ export function SiteLayout() {
   async function handleUseCurrentLocation() {
     if (!navigator.geolocation) {
       toast.error("Current location is not supported on this device.");
+      setShowLocationPrompt(false);
       return;
     }
 
     try {
       setIsLocating(true);
+      setShowLocationPrompt(false);
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
@@ -473,12 +521,19 @@ export function SiteLayout() {
       const label = await resolveLocationLabel(position.coords.latitude, position.coords.longitude);
       setCurrentLocationLabel(label);
       window.localStorage.setItem(LOCATION_STORAGE_KEY, label);
+      window.localStorage.setItem(LOCATION_PROMPT_DISMISSED_KEY, "true");
       toast.success(`Using ${label} for delivery context.`);
     } catch {
+      window.localStorage.setItem(LOCATION_PROMPT_DISMISSED_KEY, "true");
       toast.error("Location access was not completed.");
     } finally {
       setIsLocating(false);
     }
+  }
+
+  function dismissLocationPrompt() {
+    setShowLocationPrompt(false);
+    window.localStorage.setItem(LOCATION_PROMPT_DISMISSED_KEY, "true");
   }
 
   async function handleLogout() {
@@ -496,7 +551,52 @@ export function SiteLayout() {
 
   return (
     <div className="min-h-screen bg-[var(--vr-bg)] text-[var(--vr-text)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--vr-border)] bg-white/92 backdrop-blur">
+      <StoreSelectorModal open={isStoreSelectorOpen} onClose={() => setIsStoreSelectorOpen(false)} />
+      {selectedStoreName ? (
+        <div className="sticky top-0 z-50 bg-[linear-gradient(90deg,#1e3a8a_0%,#2563eb_55%,#1e3a8a_100%)] text-white">
+          <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-4 py-2 text-xs sm:px-6 lg:px-8">
+            <div className="flex min-w-0 items-center gap-2">
+              <ShoppingBag className="h-3.5 w-3.5 shrink-0 text-white/80" />
+              <span className="truncate">
+                <span className="text-white/70">Shopping at</span>
+                <span className="ml-1.5 font-bold">{selectedStoreName}</span>
+                {selectedStorePlace ? (
+                  <span className="ml-2 inline-flex items-center gap-1 text-white/80">
+                    <MapPin className="h-3 w-3" />
+                    {selectedStorePlace}
+                  </span>
+                ) : null}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsStoreSelectorOpen(true)}
+                className="rounded-full bg-white/15 px-3 py-1 font-bold transition hover:bg-white/25"
+              >
+                Change
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearSelectedStore();
+                  if (location.search.includes("storeId=")) {
+                    const params = new URLSearchParams(location.search);
+                    params.delete("storeId");
+                    const next = params.toString();
+                    navigate(`${location.pathname}${next ? `?${next}` : ""}`, { replace: true });
+                  }
+                }}
+                className="rounded-full bg-white/0 px-2 py-1 font-bold text-white/85 transition hover:text-white"
+                title="Browse all stores"
+              >
+                Browse all
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <header className={`sticky z-40 border-b border-[var(--vr-border)] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.06)] ${selectedStoreName ? "top-[34px]" : "top-0"}`}>
         <div className="border-b border-[rgba(255,255,255,0.08)] bg-[linear-gradient(90deg,#08101f_0%,#10254d_52%,#08101f_100%)]">
           <div className="vr-marquee" aria-label="Store trust and location updates">
             <div className="vr-marquee-track">
@@ -548,74 +648,201 @@ export function SiteLayout() {
                 <form id="header-search-form" onSubmit={handleSearchSubmit} className="relative flex-1">
                   <div className="vr-glass flex items-center overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
                     <Search className="ml-4 h-4 w-4 text-slate-400" />
+                    {activeStore ? (
+                      <span className="ml-3 inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[rgba(30,58,138,0.08)] px-2.5 py-1 text-[11px] font-semibold text-[var(--vr-primary)]">
+                        <Building2 className="h-3 w-3" />
+                        <span className="max-w-[140px] truncate">{activeStore.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`Clear ${activeStore.name} filter`}
+                          onClick={() => {
+                            const nextParams = new URLSearchParams(location.search);
+                            nextParams.delete("storeId");
+                            internalNavRef.current = true;
+                            navigate(nextParams.toString() ? `/products?${nextParams.toString()}` : "/products", { replace: true });
+                          }}
+                          className="ml-0.5 rounded-full p-0.5 text-[var(--vr-primary)] hover:bg-white/60"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : null}
                     <input
                       value={headerSearch}
                       onChange={(event) => handleHeaderSearchChange(event.target.value)}
                       onFocus={() => setIsSearchFocused(true)}
-                      placeholder="Search laptops, models, processors, or store-ready deals"
+                      placeholder={activeStore ? `Search products at ${activeStore.name}` : "Search laptops, models, processors, or store-ready deals"}
                       className="h-12 flex-1 border-0 bg-transparent px-3 text-sm text-[var(--vr-text)] outline-none placeholder:text-slate-400"
                     />
                     <button className="flex h-12 items-center justify-center bg-[var(--vr-primary)] px-5 text-sm font-semibold text-white transition hover:bg-[var(--vr-primary-strong)]">
                       Search
                     </button>
                   </div>
-                  {isSearchFocused && searchSuggestions.length > 0 ? (
+                  {isSearchFocused && debouncedHeaderSearch.trim().length >= 2 ? (
                     <div className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-full overflow-hidden rounded-[1.4rem] border border-[var(--vr-border)] bg-white shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
-                      {searchSuggestions.map((product) => (
-                        <Link
-                          key={product.id}
-                          to={`/products/${product.id}`}
-                          onClick={() => { setIsSearchFocused(false); setHeaderSearch(""); }}
-                          className="flex items-center gap-3 px-4 py-3 transition hover:bg-[var(--vr-surface-soft)]"
-                        >
-                          {product.images[0]?.imageUrl ? (
-                            <img src={product.images[0].imageUrl} alt="" className="h-10 w-10 rounded-lg object-contain border border-[var(--vr-border)]" />
+                      {searchSuggestions.length > 0 ? (
+                        <>
+                          {searchSuggestions.map((product) => (
+                            <Link
+                              key={product.id}
+                              to={`/products/${product.id}`}
+                              onClick={() => { setIsSearchFocused(false); setHeaderSearch(""); }}
+                              className="flex items-center gap-3 px-4 py-3 transition hover:bg-[var(--vr-surface-soft)]"
+                            >
+                              {product.images[0]?.imageUrl ? (
+                                <img src={product.images[0].imageUrl} alt="" className="h-10 w-10 rounded-lg object-contain border border-[var(--vr-border)]" />
+                              ) : (
+                                <div className="h-10 w-10 rounded-lg bg-[var(--vr-surface-soft)] border border-[var(--vr-border)]" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-[var(--vr-text)]">{product.title}</div>
+                                <div className="text-xs text-[var(--vr-muted)]">{product.brandName} | {product.categoryName}</div>
+                              </div>
+                              <div className="shrink-0 text-sm font-bold text-[var(--vr-primary)]">
+                                {formatCurrency(product.price)}
+                              </div>
+                            </Link>
+                          ))}
+                          <div className="border-t border-[var(--vr-border)] px-4 py-2">
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-[var(--vr-primary)]"
+                              onClick={() => {
+                                setIsSearchFocused(false);
+                                navigateToSearch(headerSearch);
+                              }}
+                            >
+                              See all results for "{headerSearch}"
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="px-4 py-4 text-sm text-[var(--vr-muted)]">
+                          No matches for <span className="font-semibold text-[var(--vr-text)]">"{headerSearch}"</span>
+                          {activeStore ? (
+                            <>
+                              {" "}at {activeStore.name}.{" "}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextParams = new URLSearchParams();
+                                  nextParams.set("q", headerSearch);
+                                  internalNavRef.current = true;
+                                  navigate(`/products?${nextParams.toString()}`);
+                                  setIsSearchFocused(false);
+                                }}
+                                className="font-semibold text-[var(--vr-primary)] hover:underline"
+                              >
+                                Search all branches
+                              </button>
+                            </>
                           ) : (
-                            <div className="h-10 w-10 rounded-lg bg-[var(--vr-surface-soft)] border border-[var(--vr-border)]" />
+                            <>. Press Enter to browse the full catalog.</>
                           )}
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold text-[var(--vr-text)]">{product.title}</div>
-                            <div className="text-xs text-[var(--vr-muted)]">{product.brandName} | {product.categoryName}</div>
-                          </div>
-                          <div className="shrink-0 text-sm font-bold text-[var(--vr-primary)]">
-                            {formatCurrency(product.price)}
-                          </div>
-                        </Link>
-                      ))}
-                      <div className="border-t border-[var(--vr-border)] px-4 py-2">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-[var(--vr-primary)]"
-                          onClick={() => {
-                            setIsSearchFocused(false);
-                            navigateToSearch(headerSearch);
-                          }}
-                        >
-                          See all results for "{headerSearch}"
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ) : null}
                 </form>
-                <button
-                  type="button"
-                  onClick={handleUseCurrentLocation}
-                  className="inline-flex h-12 shrink-0 items-center gap-2 rounded-[1.4rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 text-sm font-semibold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:bg-white"
-                >
-                  <MapPin className="h-4 w-4 text-[var(--vr-primary)]" />
-                  <span className="max-w-[150px] truncate">{isLocating ? "Detecting..." : currentLocationLabel || "Set location"}</span>
-                </button>
+                <div ref={storeMenuRef} className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsStoreMenuOpen((open) => !open)}
+                    aria-haspopup="listbox"
+                    aria-expanded={isStoreMenuOpen}
+                    className={`inline-flex h-12 items-center gap-2 rounded-[1.4rem] border bg-[var(--vr-surface-soft)] px-4 text-sm font-semibold text-[var(--vr-text)] transition hover:bg-white ${
+                      isStoreMenuOpen
+                        ? "border-[var(--vr-primary)] bg-white shadow-[0_0_0_3px_rgba(30,58,138,0.1)]"
+                        : "border-[var(--vr-border)] hover:border-[var(--vr-primary)]"
+                    }`}
+                  >
+                    <ShoppingBag className="h-4 w-4 text-[var(--vr-primary)]" />
+                    <div className="flex max-w-[200px] flex-col items-start truncate text-left leading-tight">
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--vr-muted)]">
+                        {headerPillCaption}
+                      </span>
+                      <span className="truncate text-sm font-bold text-[var(--vr-text)]">{headerPillName}</span>
+                      <span className="flex items-center gap-1 truncate text-[11px] font-semibold text-[var(--vr-muted)]">
+                        <MapPin className="h-3 w-3 text-[var(--vr-primary)]" />
+                        {headerPillPlace}
+                      </span>
+                    </div>
+                    <ChevronDown className={`ml-1 h-4 w-4 text-[var(--vr-muted)] transition ${isStoreMenuOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {isStoreMenuOpen ? (
+                    <div
+                      role="listbox"
+                      className="absolute right-0 top-full z-50 mt-2 w-[320px] overflow-hidden rounded-[1.2rem] border border-[var(--vr-border)] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.18)]"
+                    >
+                      <div className="border-b border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--vr-muted)]">
+                        Choose a branch
+                      </div>
+                      <ul className="max-h-[320px] overflow-y-auto py-1">
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              clearSelectedStore();
+                              if (location.search.includes("storeId=")) {
+                                const params = new URLSearchParams(location.search);
+                                params.delete("storeId");
+                                const next = params.toString();
+                                navigate(`${location.pathname}${next ? `?${next}` : ""}`, { replace: true });
+                              }
+                              setIsStoreMenuOpen(false);
+                              navigate("/products");
+                            }}
+                            className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-[var(--vr-surface-soft)] ${
+                              !selectedStoreId ? "bg-[rgba(30,58,138,0.06)] font-bold text-[var(--vr-primary)]" : ""
+                            }`}
+                          >
+                            <ShoppingBag className="h-4 w-4 shrink-0 text-[var(--vr-primary)]" />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-bold text-[var(--vr-text)]">All stores</div>
+                              <div className="text-[11px] text-[var(--vr-muted)]">Browse the full catalog</div>
+                            </div>
+                            {!selectedStoreId ? <Check className="h-4 w-4 text-[var(--vr-primary)]" /> : null}
+                          </button>
+                        </li>
+                        {stores.filter((store) => store.active).map((store) => {
+                          const isCurrent = selectedStoreId === store.id;
+                          const place = store.landmark?.trim() || store.city?.trim() || "Hyderabad";
+                          return (
+                            <li key={store.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  pickStore(store.id, store.name, place);
+                                  if (location.search.includes("storeId=")) {
+                                    const params = new URLSearchParams(location.search);
+                                    params.set("storeId", String(store.id));
+                                    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
+                                  }
+                                  setIsStoreMenuOpen(false);
+                                  navigate("/products");
+                                }}
+                                className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-[var(--vr-surface-soft)] ${
+                                  isCurrent ? "bg-[rgba(30,58,138,0.06)] font-bold text-[var(--vr-primary)]" : ""
+                                }`}
+                              >
+                                <MapPin className="h-4 w-4 shrink-0 text-[var(--vr-primary)]" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-bold text-[var(--vr-text)]">{store.name}</div>
+                                  <div className="truncate text-[11px] text-[var(--vr-muted)]">{place}{store.timings ? ` · ${store.timings}` : ""}</div>
+                                </div>
+                                {isCurrent ? <Check className="h-4 w-4 text-[var(--vr-primary)]" /> : null}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
 
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
-              <Link
-                to="/compare"
-                className="hidden rounded-2xl border border-[var(--vr-border)] p-3 text-[var(--vr-muted)] transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)] lg:inline-flex"
-                aria-label="Compare products"
-              >
-                <BarChart2 className="h-5 w-5" />
-              </Link>
               {user ? (
                 <div ref={accountMenuRef} className="relative hidden lg:block">
                   <button
@@ -715,12 +942,18 @@ export function SiteLayout() {
                 <ShoppingCart className="h-5 w-5 text-[var(--vr-primary)]" />
                 <div className="hidden text-left sm:block">
                   <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--vr-muted)]">Cart</div>
-                  <div className="text-sm font-semibold text-[var(--vr-text)]">{cartCount ? `${cartCount} item${cartCount > 1 ? "s" : ""}` : "View Cart"}</div>
+                  <div className="text-sm font-semibold text-[var(--vr-text)]">{cartCountLabel}</div>
                 </div>
-                {user && cartCount ? (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--vr-accent)] px-1 text-[10px] font-bold text-[var(--vr-dark)]">
+                {cartCount ? (
+                  <motion.span
+                    key={cartCount}
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: [0.5, 1.25, 1], opacity: 1 }}
+                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--vr-accent)] px-1 text-[10px] font-bold text-[var(--vr-dark)]"
+                  >
                     {cartCount}
-                  </span>
+                  </motion.span>
                 ) : null}
               </NavLink>
 
@@ -787,65 +1020,46 @@ export function SiteLayout() {
                 </div>
 
                 {activeDiscoveryMenu === "products" ? (
-                  <div className="absolute left-0 top-full z-50 w-[480px] pt-3">
-                    <div className="overflow-hidden rounded-[1.8rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_28px_70px_rgba(15,23,42,0.16)]">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">All Products</div>
-                          <div className="mt-1 text-sm text-[var(--vr-muted)]">{productDiscoveryDescription}</div>
-                        </div>
-                        <Link to="/products" className="text-sm font-semibold text-[var(--vr-primary)]" onClick={() => setActiveDiscoveryMenu(null)}>
-                          View all
-                        </Link>
-                      </div>
-                      <div className="vr-scrollbar grid max-h-[420px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+                  <div className="absolute left-0 top-full z-50 w-[320px] pt-3">
+                    <div className="overflow-hidden rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-2 shadow-[0_28px_70px_rgba(15,23,42,0.16)]">
+                      <div className="vr-scrollbar flex max-h-[420px] flex-col overflow-y-auto">
                         {orderedCategories.map((category) => {
                           const matchCount = categoryMatchCounts[category.id] ?? 0;
                           const isActive = activeCategoryIds.includes(category.id);
                           const isUnavailable = matchCount === 0 && !isActive;
-                          const categorySupportText = isUnavailable
-                            ? "No live products in this category"
-                            : isActive && isProductsPage
-                              ? "Selected in current filters"
-                              : `${matchCount} ${matchCount === 1 ? "product" : "products"}`;
+                          const categorySubtitle = isUnavailable
+                            ? "No live products"
+                            : `${matchCount} ${matchCount === 1 ? "model" : "models"}`;
 
-                          const categoryCardClassName = `group flex w-full flex-col rounded-[1.35rem] border p-3 text-left transition ${
+                          const rowClassName = `flex items-center gap-3 rounded-[1rem] px-3 py-2.5 text-left transition ${
                             isActive
-                              ? "border-[var(--vr-primary)] bg-white shadow-[0_16px_32px_rgba(15,23,42,0.08)]"
-                              : "border-[var(--vr-border)] bg-[var(--vr-surface-soft)] hover:border-[var(--vr-primary)] hover:bg-white"
-                          } ${isUnavailable ? "cursor-not-allowed opacity-45" : ""}`;
+                              ? "bg-[var(--vr-surface-soft)]"
+                              : "hover:bg-[var(--vr-surface-soft)]"
+                          } ${isUnavailable ? "cursor-not-allowed opacity-50" : ""}`;
 
-                          const categoryCardContent = (
+                          const rowContent = (
                             <>
-                              <div className="flex w-full items-start justify-between gap-3">
-                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1rem] border border-[var(--vr-border)] bg-white">
-                                  {category.iconUrl ? (
-                                    <img src={category.iconUrl} alt={category.name} className="h-full w-full object-contain p-2.5" />
-                                  ) : (
-                                    <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-10 w-10 rounded-[0.7rem] object-cover" />
-                                  )}
-                                </div>
-                                <span
-                                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                    isActive
-                                      ? "bg-[var(--vr-primary)] text-white"
-                                      : "border border-[var(--vr-border)] bg-white text-[var(--vr-muted)]"
-                                  }`}
-                                >
-                                  {matchCount}
-                                </span>
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.7rem] border border-[var(--vr-border)] bg-white">
+                                {category.iconUrl ? (
+                                  <img src={category.iconUrl} alt={category.name} className="h-full w-full object-contain p-1.5" />
+                                ) : (
+                                  <Laptop2 className="h-4 w-4 text-[var(--vr-muted)]" />
+                                )}
                               </div>
-                              <div className="mt-3 w-full">
-                                <div className="truncate text-base font-bold text-[var(--vr-text)]">{category.name}</div>
-                                <div className="mt-1 text-xs text-[var(--vr-muted)]">{categorySupportText}</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-[var(--vr-text)]">{category.name}</div>
+                                <div className="truncate text-[11px] text-[var(--vr-muted)]">{categorySubtitle}</div>
                               </div>
+                              {isActive ? (
+                                <span className="shrink-0 rounded-full bg-[var(--vr-primary)] px-2 py-0.5 text-[10px] font-semibold text-white">on</span>
+                              ) : null}
                             </>
                           );
 
                           if (isUnavailable) {
                             return (
-                              <div key={category.id} className={categoryCardClassName} aria-disabled="true">
-                                {categoryCardContent}
+                              <div key={category.id} className={rowClassName} aria-disabled="true">
+                                {rowContent}
                               </div>
                             );
                           }
@@ -855,20 +1069,21 @@ export function SiteLayout() {
                               key={category.id}
                               to={getCategoryLink(category)}
                               onClick={() => setActiveDiscoveryMenu(null)}
-                              className={categoryCardClassName}
+                              className={rowClassName}
                             >
-                              {categoryCardContent}
+                              {rowContent}
                             </Link>
                           );
                         })}
                       </div>
-                      <div className="mt-4 grid gap-2 border-t border-[var(--vr-border)] pt-4 sm:grid-cols-3">
+                      <div className="mt-1 grid gap-1 border-t border-[var(--vr-border)] pt-2">
                         <Link
                           to="/products"
                           onClick={() => setActiveDiscoveryMenu(null)}
-                          className="rounded-[1.2rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3 text-sm font-semibold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:bg-white"
+                          className="flex items-center justify-between rounded-[0.9rem] px-3 py-2 text-xs font-semibold text-[var(--vr-primary)] transition hover:bg-[var(--vr-surface-soft)]"
                         >
-                          Browse all products
+                          <span>Browse all products</span>
+                          <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
                         </Link>
                         {desktopLinks.map((item) => {
                           const Icon = item.icon;
@@ -877,9 +1092,9 @@ export function SiteLayout() {
                               key={item.label}
                               to={item.to}
                               onClick={() => setActiveDiscoveryMenu(null)}
-                              className="inline-flex items-center gap-2 rounded-[1.2rem] border border-[var(--vr-border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:bg-[var(--vr-surface-soft)]"
+                              className="inline-flex items-center gap-2 rounded-[0.9rem] px-3 py-2 text-xs font-semibold text-[var(--vr-text)] transition hover:bg-[var(--vr-surface-soft)]"
                             >
-                              <Icon className="h-4 w-4 text-[var(--vr-primary)]" />
+                              <Icon className="h-3.5 w-3.5 text-[var(--vr-primary)]" />
                               {item.label}
                             </Link>
                           );
@@ -923,65 +1138,38 @@ export function SiteLayout() {
                 </div>
 
                 {activeDiscoveryMenu === "brands" ? (
-                  <div className="absolute left-0 top-full z-50 w-[480px] pt-3">
-                    <div className="overflow-hidden rounded-[1.8rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_28px_70px_rgba(15,23,42,0.16)]">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">All Brands</div>
-                          <div className="mt-1 text-sm text-[var(--vr-muted)]">{brandDiscoveryDescription}</div>
-                        </div>
-                        <Link to="/brands" className="text-sm font-semibold text-[var(--vr-primary)]" onClick={() => setActiveDiscoveryMenu(null)}>
-                          View all
-                        </Link>
-                      </div>
-                      <div className="vr-scrollbar grid max-h-[420px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+                  <div className="absolute left-0 top-full z-50 w-[280px] pt-3">
+                    <div className="overflow-hidden rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-2 shadow-[0_28px_70px_rgba(15,23,42,0.16)]">
+                      <div className="vr-scrollbar flex max-h-[420px] flex-col overflow-y-auto">
                         {orderedBrands.map((brand) => {
                           const matchCount = brandMatchCounts[brand.id] ?? 0;
                           const isActive = activeBrandIds.includes(brand.id);
                           const isUnavailable = matchCount === 0 && !isActive;
-                          const brandSupportText = isUnavailable
-                            ? "No live products for this brand"
-                            : isActive && isProductsPage
-                              ? "Selected in current filters"
-                              : `${matchCount} ${matchCount === 1 ? "product" : "products"}`;
 
-                          const brandCardClassName = `group flex w-full flex-col items-center rounded-[1.3rem] border p-4 text-center transition ${
-                            isActive
-                              ? "border-[var(--vr-primary)] bg-[var(--vr-surface-soft)] shadow-[0_16px_32px_rgba(15,23,42,0.08)]"
-                              : "border-[var(--vr-border)] bg-white hover:border-[var(--vr-primary)] hover:bg-[var(--vr-surface-soft)]"
-                          } ${isUnavailable ? "cursor-not-allowed opacity-45" : ""}`;
+                          const rowClassName = `flex items-center gap-3 rounded-[1rem] px-3 py-2.5 text-left transition ${
+                            isActive ? "bg-[var(--vr-surface-soft)]" : "hover:bg-[var(--vr-surface-soft)]"
+                          } ${isUnavailable ? "cursor-not-allowed opacity-50" : ""}`;
 
-                          const brandCardContent = (
+                          const rowContent = (
                             <>
-                              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1rem] border border-[var(--vr-border)] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.06)]">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--vr-border)] bg-white">
                                 {brand.logoUrl ? (
-                                  <img src={brand.logoUrl} alt={brand.name} className="h-11 w-11 object-contain" />
+                                  <img src={brand.logoUrl} alt={brand.name} className="h-6 w-6 object-contain" />
                                 ) : (
-                                  <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-11 w-11 rounded-[0.7rem] object-cover" />
+                                  <Tags className="h-4 w-4 text-[var(--vr-muted)]" />
                                 )}
                               </div>
-                              <div className="w-full">
-                                <div className="mt-3 text-base font-bold text-[var(--vr-text)]">{brand.name}</div>
-                                <div className="mt-1 text-xs text-[var(--vr-muted)]">{brandSupportText}</div>
-                                <div className="mt-3">
-                                  <span
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                      isActive
-                                        ? "bg-[var(--vr-primary)] text-white"
-                                        : "border border-[var(--vr-border)] bg-white text-[var(--vr-muted)]"
-                                    }`}
-                                  >
-                                    {matchCount} {matchCount === 1 ? "item" : "items"}
-                                  </span>
-                                </div>
-                              </div>
+                              <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--vr-text)]">{brand.name}</div>
+                              {isActive ? (
+                                <span className="shrink-0 rounded-full bg-[var(--vr-primary)] px-2 py-0.5 text-[10px] font-semibold text-white">on</span>
+                              ) : null}
                             </>
                           );
 
                           if (isUnavailable) {
                             return (
-                              <div key={brand.id} className={brandCardClassName} aria-disabled="true">
-                                {brandCardContent}
+                              <div key={brand.id} className={rowClassName} aria-disabled="true">
+                                {rowContent}
                               </div>
                             );
                           }
@@ -991,35 +1179,22 @@ export function SiteLayout() {
                               key={brand.id}
                               to={getBrandLink(brand)}
                               onClick={() => setActiveDiscoveryMenu(null)}
-                              className={brandCardClassName}
+                              className={rowClassName}
                             >
-                              {brandCardContent}
+                              {rowContent}
                             </Link>
                           );
                         })}
                       </div>
-                      <div className="mt-4 grid gap-2 border-t border-[var(--vr-border)] pt-4 sm:grid-cols-3">
+                      <div className="mt-1 grid gap-1 border-t border-[var(--vr-border)] pt-2">
                         <Link
                           to="/brands"
                           onClick={() => setActiveDiscoveryMenu(null)}
-                          className="rounded-[1.2rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3 text-sm font-semibold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:bg-white"
+                          className="flex items-center justify-between rounded-[0.9rem] px-3 py-2 text-xs font-semibold text-[var(--vr-primary)] transition hover:bg-[var(--vr-surface-soft)]"
                         >
-                          Browse all brands
+                          <span>Browse all brands</span>
+                          <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
                         </Link>
-                        {desktopLinks.map((item) => {
-                          const Icon = item.icon;
-                          return (
-                            <Link
-                              key={item.label}
-                              to={item.to}
-                              onClick={() => setActiveDiscoveryMenu(null)}
-                              className="inline-flex items-center gap-2 rounded-[1.2rem] border border-[var(--vr-border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:bg-[var(--vr-surface-soft)]"
-                            >
-                              <Icon className="h-4 w-4 text-[var(--vr-primary)]" />
-                              {item.label}
-                            </Link>
-                          );
-                        })}
                       </div>
                     </div>
                   </div>
@@ -1045,17 +1220,51 @@ export function SiteLayout() {
               })}
             </nav>
 
-            <div className="flex items-center gap-2">
-              {locationBadgeLabel ? (
-                <Badge tone="primary" outlined>
-                  <MapPin className="h-3.5 w-3.5" />
-                  {locationBadgeLabel}
-                </Badge>
-              ) : null}
-            </div>
           </div>
         </div>
       </header>
+
+      {showLocationPrompt ? (
+        <div className="fixed inset-x-3 top-[8.25rem] z-50 mx-auto max-w-[560px] rounded-[1.4rem] border border-[rgba(30,58,138,0.14)] bg-white p-4 shadow-[0_22px_60px_rgba(15,23,42,0.18)] sm:top-[8.75rem] lg:top-[9.25rem]">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[rgba(30,58,138,0.08)] text-[var(--vr-primary)]">
+              <MapPin className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold text-[var(--vr-text)]">Allow location for nearby store support?</div>
+              <p className="mt-1 text-xs leading-5 text-[var(--vr-muted)]">
+                We will show your detected area in the header and use it for delivery and branch context.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  disabled={isLocating}
+                  className="inline-flex items-center gap-2 rounded-full bg-[var(--vr-primary)] px-4 py-2 text-xs font-bold text-white transition hover:bg-[var(--vr-primary-strong)] disabled:opacity-60"
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  {isLocating ? "Detecting..." : "Allow location"}
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissLocationPrompt}
+                  className="rounded-full border border-[var(--vr-border)] bg-white px-4 py-2 text-xs font-bold text-[var(--vr-muted)] transition hover:text-[var(--vr-text)]"
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Close location prompt"
+              onClick={dismissLocationPrompt}
+              className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-[var(--vr-danger)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {isMobileMenuOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -1294,9 +1503,9 @@ export function SiteLayout() {
           target="_blank"
           rel="noreferrer"
           aria-label="Chat on WhatsApp"
-          className="fixed bottom-24 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] shadow-[0_8px_28px_rgba(37,211,102,0.5)] transition hover:scale-110 lg:bottom-6"
+          className="fixed bottom-28 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] shadow-[0_8px_28px_rgba(37,211,102,0.42)] transition hover:scale-105 sm:right-5 lg:bottom-8 lg:h-[3.25rem] lg:w-[3.25rem]"
         >
-          <svg viewBox="0 0 24 24" className="h-7 w-7 fill-white" xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox="0 0 24 24" className="h-6 w-6 fill-white" xmlns="http://www.w3.org/2000/svg">
             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
           </svg>
         </a>
@@ -1317,10 +1526,15 @@ export function SiteLayout() {
               >
                 <div className="relative">
                   <item.icon className="h-5 w-5" />
-                  {isCart && user && cartCount ? (
-                    <span className="absolute -right-2 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[var(--vr-accent)] px-1 text-[9px] font-bold text-[var(--vr-dark)]">
+                  {isCart && cartCount ? (
+                    <motion.span
+                      key={cartCount}
+                      initial={{ scale: 0.5 }}
+                      animate={{ scale: [0.5, 1.25, 1] }}
+                      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute -right-2 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[var(--vr-accent)] px-1 text-[9px] font-bold text-[var(--vr-dark)]">
                       {cartCount}
-                    </span>
+                    </motion.span>
                   ) : null}
                 </div>
                 <span className="truncate">{item.label}</span>
