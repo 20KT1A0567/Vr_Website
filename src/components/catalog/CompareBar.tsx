@@ -13,7 +13,7 @@ export function CompareBar() {
   const anchorCategory = compareList[0]?.categoryName ?? "";
 
   return (
-    <div className="fixed bottom-[11rem] right-3 z-50 sm:right-5 lg:bottom-[6.25rem]">
+    <div className="vr-mobile-compare fixed bottom-[6.25rem] right-3 z-40 sm:right-4 lg:bottom-[5.5rem] lg:right-5">
       {expanded ? (
         <div className="w-[300px] overflow-hidden rounded-[1.2rem] border border-[var(--vr-border)] bg-white shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
           <div className="flex items-center justify-between gap-2 border-b border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-3 py-2">
@@ -86,9 +86,9 @@ export function CompareBar() {
             type="button"
             aria-label={`Compare ${compareList.length} products`}
             onClick={() => setExpanded(true)}
-            className="relative inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--vr-primary)] text-white shadow-[0_14px_28px_rgba(30,58,138,0.35)] transition hover:bg-[var(--vr-primary-strong)] lg:h-12 lg:w-12"
+            className="relative inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--vr-primary)] text-white shadow-[0_12px_24px_rgba(30,58,138,0.28)] transition hover:bg-[var(--vr-primary-strong)] lg:h-11 lg:w-11"
           >
-            <GitCompare className="h-5 w-5" />
+            <GitCompare className="h-4.5 w-4.5" />
             <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-white bg-[var(--vr-accent)] px-1 text-[10px] font-bold text-[var(--vr-dark)]">
               {compareList.length}
             </span>

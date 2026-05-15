@@ -8,6 +8,7 @@ import { CartPage } from "pages/CartPage";
 import { CheckoutPage } from "pages/CheckoutPage";
 import { ComparePage } from "pages/ComparePage";
 import { ContactPage } from "pages/ContactPage";
+import { HelpMeChoosePage } from "pages/HelpMeChoosePage";
 import { HomePage } from "pages/HomePage";
 import { InfoPage } from "pages/InfoPage";
 import { LoginPage } from "pages/LoginPage";
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/wishlist" element={<MotionPage><WishlistPage /></MotionPage>} />
             <Route path="/stores" element={<MotionPage><StoresPage /></MotionPage>} />
             <Route path="/contact" element={<MotionPage><ContactPage /></MotionPage>} />
+            <Route path="/help-me-choose" element={<MotionPage><HelpMeChoosePage /></MotionPage>} />
             <Route path="/:slug" element={<MotionPage><InfoPage /></MotionPage>} />
             <Route path="/compare" element={<MotionPage><ComparePage /></MotionPage>} />
             <Route path="/login" element={<MotionPage><LoginPage /></MotionPage>} />

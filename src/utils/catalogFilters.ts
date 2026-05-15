@@ -7,6 +7,10 @@ export interface CatalogFilterState {
   processorOptions: string[];
   ramOptions: number[];
   storageOptions: number[];
+  displayOptions: string[];
+  osOptions: string[];
+  graphicsOptions: string[];
+  featuredOnly: boolean;
   conditions: ProductCondition[];
   inStockOnly: boolean;
   minPrice: string;
@@ -20,6 +24,10 @@ export const initialCatalogFilters: CatalogFilterState = {
   processorOptions: [],
   ramOptions: [],
   storageOptions: [],
+  displayOptions: [],
+  osOptions: [],
+  graphicsOptions: [],
+  featuredOnly: false,
   conditions: [],
   inStockOnly: false,
   minPrice: "",
@@ -38,8 +46,12 @@ export interface CatalogFilterCounts {
   processorCounts: Record<string, number>;
   ramCounts: Record<number, number>;
   storageCounts: Record<number, number>;
+  displayCounts: Record<string, number>;
+  osCounts: Record<string, number>;
+  graphicsCounts: Record<string, number>;
   conditionCounts: Partial<Record<ProductCondition, number>>;
   inStockCount: number;
+  featuredCount: number;
 }
 
 export function normalizeCatalogSearchText(value?: string) {
@@ -134,6 +146,31 @@ export function matchesCatalogFilters(product: Product, filters: CatalogFilterSt
     return false;
   }
 
+  if (filters.displayOptions.length) {
+    const displaySize = normalizeCatalogSearchText(product.displaySize);
+    if (!filters.displayOptions.some((option) => displaySize.includes(normalizeCatalogSearchText(option)))) {
+      return false;
+    }
+  }
+
+  if (filters.osOptions.length) {
+    const osText = normalizeCatalogSearchText(product.os);
+    if (!filters.osOptions.some((option) => osText.includes(normalizeCatalogSearchText(option)))) {
+      return false;
+    }
+  }
+
+  if (filters.graphicsOptions.length) {
+    const graphicsText = normalizeCatalogSearchText(product.graphicsCard);
+    if (!filters.graphicsOptions.some((option) => graphicsText.includes(normalizeCatalogSearchText(option)))) {
+      return false;
+    }
+  }
+
+  if (filters.featuredOnly && !product.featured) {
+    return false;
+  }
+
   return true;
 }
 
@@ -149,10 +186,18 @@ function filtersWithoutSection(filters: CatalogFilterState, section: keyof Catal
       return { ...filters, ramOptions: [] };
     case "storageCounts":
       return { ...filters, storageOptions: [] };
+    case "displayCounts":
+      return { ...filters, displayOptions: [] };
+    case "osCounts":
+      return { ...filters, osOptions: [] };
+    case "graphicsCounts":
+      return { ...filters, graphicsOptions: [] };
     case "conditionCounts":
       return { ...filters, conditions: [] };
     case "inStockCount":
       return { ...filters, inStockOnly: false };
+    case "featuredCount":
+      return { ...filters, featuredOnly: false };
     case "price":
       return { ...filters, minPrice: "", maxPrice: "" };
     default:
@@ -166,8 +211,12 @@ export function buildCatalogFilterCounts(products: Product[], filters: CatalogFi
   const processorBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "processorCounts")));
   const ramBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "ramCounts")));
   const storageBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "storageCounts")));
+  const displayBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "displayCounts")));
+  const osBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "osCounts")));
+  const graphicsBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "graphicsCounts")));
   const conditionBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "conditionCounts")));
   const stockBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "inStockCount")));
+  const featuredBase = products.filter((product) => matchesCatalogFilters(product, filtersWithoutSection(filters, "featuredCount")));
 
   const brandCounts = brandBase.reduce<Record<number, number>>((counts, product) => {
     if (product.brandId) {
@@ -204,6 +253,27 @@ export function buildCatalogFilterCounts(products: Product[], filters: CatalogFi
     return counts;
   }, {});
 
+  const displayCounts = displayBase.reduce<Record<string, number>>((counts, product) => {
+    if (product.displaySize?.trim()) {
+      counts[product.displaySize] = (counts[product.displaySize] ?? 0) + 1;
+    }
+    return counts;
+  }, {});
+
+  const osCounts = osBase.reduce<Record<string, number>>((counts, product) => {
+    if (product.os?.trim()) {
+      counts[product.os] = (counts[product.os] ?? 0) + 1;
+    }
+    return counts;
+  }, {});
+
+  const graphicsCounts = graphicsBase.reduce<Record<string, number>>((counts, product) => {
+    if (product.graphicsCard?.trim()) {
+      counts[product.graphicsCard] = (counts[product.graphicsCard] ?? 0) + 1;
+    }
+    return counts;
+  }, {});
+
   const conditionCounts = conditionBase.reduce<Partial<Record<ProductCondition, number>>>((counts, product) => {
     if (product.productCondition) {
       counts[product.productCondition] = (counts[product.productCondition] ?? 0) + 1;
@@ -212,6 +282,7 @@ export function buildCatalogFilterCounts(products: Product[], filters: CatalogFi
   }, {});
 
   const inStockCount = stockBase.filter((product) => isProductInStock(product)).length;
+  const featuredCount = featuredBase.filter((product) => product.featured).length;
 
   return {
     brandCounts,
@@ -219,7 +290,11 @@ export function buildCatalogFilterCounts(products: Product[], filters: CatalogFi
     processorCounts,
     ramCounts,
     storageCounts,
+    displayCounts,
+    osCounts,
+    graphicsCounts,
     conditionCounts,
-    inStockCount
+    inStockCount,
+    featuredCount
   };
 }

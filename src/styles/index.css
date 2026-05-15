@@ -4,24 +4,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =====================================================
+   DESIGN TOKENS — Production-matched: venkat.anushatechnologies.com
+   ===================================================== */
 :root {
   color-scheme: light;
-  --vr-primary: #0f172a; /* Deep charcoal/black for premium feel */
-  --vr-primary-strong: #000000;
-  --vr-accent: #2563eb; /* Royal blue for actions */
-  --vr-accent-soft: rgba(37, 99, 235, 0.08);
+
+  /* Primary = Navy blue (matches production header, buttons, brand color) */
+  --vr-primary: #1e3a8a;
+  --vr-primary-strong: #1e40af;
+
+  /* Accent = Amber (matches production badges, CTA highlights) */
+  --vr-accent: #f59e0b;
+  --vr-accent-soft: rgba(245, 158, 11, 0.10);
+
+  /* Page background = light blue-grey like production */
+  --vr-bg: #eef2f7;
   --vr-dark: #0f172a;
-  --vr-bg: #ffffff;
   --vr-surface: #ffffff;
   --vr-surface-soft: #f8fafc;
-  --vr-border: #f1f5f9;
-  --vr-border-strong: #e2e8f0;
+  --vr-border: #e2e8f0;
+  --vr-border-strong: #cbd5e1;
   --vr-text: #0f172a;
   --vr-muted: #64748b;
-  --vr-success: #10b981;
-  --vr-danger: #ef4444;
+  --vr-success: #16a34a;
+  --vr-danger: #dc2626;
 }
 
+/* =====================================================
+   BASE
+   ===================================================== */
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;
@@ -34,23 +46,40 @@ body {
   background: var(--vr-bg);
   color: var(--vr-text);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 #root {
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
+body[data-mobile-overlay="true"] .vr-mobile-floating-whatsapp,
+body[data-mobile-overlay="true"] .vr-mobile-compare {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+}
+
+/* =====================================================
+   TYPOGRAPHY
+   ===================================================== */
 .display-font {
   font-family: "Outfit", sans-serif;
 }
 
-/* Premium Utilities */
+/* =====================================================
+   GLASS EFFECT
+   ===================================================== */
 .vr-glass {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* =====================================================
+   CARD VARIANTS
+   ===================================================== */
 .vr-card-premium {
   @apply rounded-3xl border border-[var(--vr-border)] bg-white transition-all duration-300;
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
@@ -61,12 +90,27 @@ body {
   transform: translateY(-2px);
 }
 
+.vr-card-lift {
+  @apply transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_42px_rgba(15,23,42,0.10)];
+}
+
+/* =====================================================
+   INPUTS & BUTTONS
+   ===================================================== */
+.vr-input {
+  @apply w-full rounded-[1.1rem] border border-[var(--vr-border)] bg-white px-4 py-3 text-sm outline-none transition-all;
+}
+
+.vr-input:focus {
+  @apply border-[var(--vr-primary)] ring-2 ring-[rgba(30,58,138,0.10)];
+}
+
 .vr-input-premium {
   @apply w-full rounded-2xl border border-[var(--vr-border-strong)] bg-[var(--vr-surface-soft)] px-5 py-4 text-sm outline-none transition-all;
 }
 
 .vr-input-premium:focus {
-  @apply border-[var(--vr-accent)] bg-white ring-4 ring-[var(--vr-accent-soft)];
+  @apply border-[var(--vr-primary)] bg-white ring-4 ring-[rgba(30,58,138,0.10)];
 }
 
 .vr-btn-primary {
@@ -77,17 +121,148 @@ body {
   @apply inline-flex items-center justify-center rounded-2xl border border-[var(--vr-border-strong)] bg-white px-8 py-4 font-semibold text-[var(--vr-text)] transition-all hover:bg-[var(--vr-surface-soft)] active:scale-[0.98];
 }
 
-/* Custom Gradients */
+/* =====================================================
+   RANGE SLIDER OVERRIDE
+   ===================================================== */
+.vr-range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: none;
+  background: transparent;
+}
+
+.vr-range-input::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+}
+
+.vr-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px white, 0 2px 5px rgba(0,0,0,0.2);
+  margin-top: -9px;
+}
+
+.vr-range-input::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+.vr-range-input::-moz-range-thumb {
+  pointer-events: auto;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px white, 0 2px 5px rgba(0,0,0,0.2);
+  border: none;
+}
+
+/* =====================================================
+   GRADIENTS
+   ===================================================== */
 .vr-grad-premium {
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
 }
 
 .vr-grad-text {
   @apply bg-clip-text text-transparent;
-  background-image: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+  background-image: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
 }
 
-/* Product Media */
+/* =====================================================
+   PAGE SHELLS
+   ===================================================== */
+.vr-page-shell {
+  @apply mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8;
+}
+
+.vr-page-shell-tight {
+  @apply mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8;
+}
+
+.vr-mobile-safe {
+  min-height: 48vh;
+}
+
+/* =====================================================
+   MARQUEE / TRUST BAR
+   ===================================================== */
+.vr-marquee {
+  @apply relative flex items-center overflow-hidden text-white;
+  height: 2rem;
+}
+
+.vr-marquee-track {
+  @apply flex h-full w-max items-center;
+  animation: vr-marquee-scroll 34s linear infinite;
+}
+
+.vr-marquee-content {
+  @apply flex h-full shrink-0 items-center gap-6;
+}
+
+.vr-marquee-item {
+  @apply inline-flex h-full items-center gap-2 whitespace-nowrap text-xs font-semibold leading-none text-white/80;
+}
+
+.vr-marquee-icon {
+  @apply inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[#bfdbfe];
+}
+
+.vr-marquee-label {
+  @apply whitespace-nowrap;
+}
+
+.vr-marquee-separator {
+  @apply ml-6 h-1 w-1 rounded-full bg-white/30;
+}
+
+.vr-marquee:hover .vr-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes vr-marquee-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes toast-shrink {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* =====================================================
+   DESKTOP NAV SHELL (pill-style nav bar)
+   ===================================================== */
+.vr-nav-shell {
+  @apply rounded-full border border-[var(--vr-border)] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.05)];
+}
+
+/* =====================================================
+   BOTTOM NAVIGATION (mobile)
+   ===================================================== */
+.vr-bottom-nav-link {
+  @apply flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition;
+}
+
+.vr-bottom-nav-link-idle {
+  @apply text-[var(--vr-muted)] hover:bg-[var(--vr-surface-soft)] hover:text-[var(--vr-text)];
+}
+
+.vr-bottom-nav-link-active {
+  @apply bg-[rgba(30,58,138,0.08)] text-[var(--vr-primary)];
+}
+
+/* =====================================================
+   PRODUCT MEDIA
+   ===================================================== */
 .vr-product-media-wrapper {
   @apply relative aspect-square overflow-hidden rounded-2xl bg-[var(--vr-surface-soft)];
 }
@@ -96,19 +271,48 @@ body {
   @apply h-full w-full object-contain transition-transform duration-500 group-hover:scale-105;
 }
 
-/* Animation Utilities */
+/* =====================================================
+   SCROLLBAR (thin, for dropdowns & sidebars)
+   ===================================================== */
+.vr-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 transparent;
+}
+.vr-scrollbar::-webkit-scrollbar { width: 4px; }
+.vr-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.vr-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+
+/* =====================================================
+   ANIMATIONS
+   ===================================================== */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-in {
   animation: fadeIn 0.6s ease-out forwards;
 }
 
-/* Responsive Overrides */
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.32s ease-out forwards;
+}
+
+/* =====================================================
+   RESPONSIVE OVERRIDES
+   ===================================================== */
 @media (max-width: 768px) {
   .vr-card-premium {
     @apply rounded-2xl;
+  }
+
+  /* Mobile bottom nav clearance */
+  .vr-mobile-safe {
+    padding-bottom: 80px;
   }
 }

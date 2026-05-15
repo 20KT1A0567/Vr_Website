@@ -3,23 +3,45 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
 import {
   BarChart2,
+  Battery,
   Bell,
   BellOff,
+  Box,
+  Camera,
   CheckCircle2,
   ChevronRight,
+  Cpu,
+  Database,
+  Gauge,
+  HardDrive,
+  Hash,
   Heart,
+  Keyboard,
+  Layers,
   MapPin,
+  MemoryStick,
   MessageCircle,
+  Monitor,
+  Package,
   PhoneCall,
   PlayCircle,
+  Plug2,
+  Scale,
   Send,
+  Settings,
   Share2,
   ShieldCheck,
   ShoppingCart,
   Star,
+  Tag,
+  Target,
   Truck,
-  Undo2
+  Undo2,
+  Volume2,
+  Wifi,
+  Zap
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { catalogApi, customerApi } from "api/client";
@@ -53,6 +75,38 @@ import {
 import { getVideoEmbedUrl, isDirectVideoUrl } from "../utils/media";
 import { getFieldValue, getVisibleSpecSections, resolveProductCategoryDetailTemplate } from "../utils/productCategorySchema";
 
+const SPEC_ICON_MAP: Array<{ patterns: string[]; Icon: LucideIcon; bg: string; color: string }> = [
+  { patterns: ["processor", "cpu", "generation", "gen"], Icon: Cpu, bg: "bg-blue-50", color: "text-blue-600" },
+  { patterns: ["ram", "memory"], Icon: MemoryStick, bg: "bg-purple-50", color: "text-purple-600" },
+  { patterns: ["storage", "ssd", "hdd", "drive"], Icon: HardDrive, bg: "bg-orange-50", color: "text-orange-600" },
+  { patterns: ["display", "screen", "size", "resolution", "pixel"], Icon: Monitor, bg: "bg-cyan-50", color: "text-cyan-600" },
+  { patterns: ["operating", "windows", "linux", "macos", "os", "system"], Icon: Layers, bg: "bg-sky-50", color: "text-sky-600" },
+  { patterns: ["graphics", "gpu", "video"], Icon: Zap, bg: "bg-yellow-50", color: "text-yellow-600" },
+  { patterns: ["battery", "cycle"], Icon: Battery, bg: "bg-green-50", color: "text-green-600" },
+  { patterns: ["weight"], Icon: Scale, bg: "bg-slate-100", color: "text-slate-600" },
+  { patterns: ["warranty"], Icon: ShieldCheck, bg: "bg-emerald-50", color: "text-emerald-600" },
+  { patterns: ["return"], Icon: Undo2, bg: "bg-rose-50", color: "text-rose-600" },
+  { patterns: ["port", "slot", "usb", "hdmi"], Icon: Plug2, bg: "bg-indigo-50", color: "text-indigo-600" },
+  { patterns: ["connect", "wifi", "bluetooth", "lan", "ethernet"], Icon: Wifi, bg: "bg-teal-50", color: "text-teal-600" },
+  { patterns: ["webcam", "camera"], Icon: Camera, bg: "bg-pink-50", color: "text-pink-600" },
+  { patterns: ["keyboard", "input"], Icon: Keyboard, bg: "bg-violet-50", color: "text-violet-600" },
+  { patterns: ["ideal", "use"], Icon: Target, bg: "bg-amber-50", color: "text-amber-600" },
+  { patterns: ["model", "number"], Icon: Hash, bg: "bg-slate-100", color: "text-slate-500" },
+  { patterns: ["box", "contents", "include", "package", "charger"], Icon: Package, bg: "bg-lime-50", color: "text-lime-600" },
+  { patterns: ["refresh", "hz", "response", "brightness"], Icon: Gauge, bg: "bg-blue-50", color: "text-blue-600" },
+  { patterns: ["panel", "type"], Icon: Monitor, bg: "bg-indigo-50", color: "text-indigo-600" },
+  { patterns: ["form factor", "form"], Icon: Box, bg: "bg-slate-100", color: "text-slate-500" },
+  { patterns: ["audio", "sound", "speaker", "optical"], Icon: Volume2, bg: "bg-purple-50", color: "text-purple-600" },
+  { patterns: ["series"], Icon: Tag, bg: "bg-slate-100", color: "text-slate-500" },
+  { patterns: ["condition"], Icon: CheckCircle2, bg: "bg-green-50", color: "text-green-600" },
+  { patterns: ["database", "ram type"], Icon: Database, bg: "bg-purple-50", color: "text-purple-600" },
+];
+
+function getSpecMeta(label: string): { Icon: LucideIcon; bg: string; color: string } {
+  const lower = label.toLowerCase();
+  return SPEC_ICON_MAP.find((entry) => entry.patterns.some((p) => lower.includes(p))) ?? { Icon: Settings, bg: "bg-slate-100", color: "text-slate-400" };
+}
+
 function splitDetailText(value: string) {
   return value
     .split(/\r?\n|,|\|/)
@@ -78,7 +132,7 @@ function formatDateLabel(value?: string) {
   return new Date(parsed).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-type DetailTab = "description" | "specifications" | "reviews" | "shipping";
+type DetailTab = "description" | "specifications" | "about" | "reviews" | "shipping";
 
 function StarRating({ value, onChange, size = "md" }: { value: number; onChange?: (v: number) => void; size?: "sm" | "md" }) {
   return (
@@ -180,6 +234,46 @@ export function ProductDetailPage() {
     .filter((item): item is string => Boolean(item))
     .flatMap((item) => splitDetailText(item))
     .slice(0, 4);
+  const aboutProductText = product.description?.trim() || detailTemplate.intro;
+  const aboutProductHighlights = (overviewHighlights.length ? overviewHighlights : detailTemplate.merchandisingPoints)
+    .slice(0, 4);
+  const conditionAndWarrantyRows = [
+    {
+      label: "Condition",
+      value:
+        product.productCondition === "EXCELLENT"
+          ? "Excellent"
+          : product.productCondition === "GOOD"
+            ? "Good"
+            : product.productCondition === "FAIR"
+              ? "Fair"
+              : "Certified refurbished",
+      Icon: CheckCircle2,
+      bg: "bg-emerald-50",
+      color: "text-emerald-600"
+    },
+    {
+      label: "Warranty",
+      value: getProductWarrantyLabel(product),
+      Icon: ShieldCheck,
+      bg: "bg-blue-50",
+      color: "text-blue-600"
+    },
+    {
+      label: "Returns",
+      value: product.returnDays ? `${product.returnDays} day easy returns` : "Easy return support",
+      Icon: Undo2,
+      bg: "bg-rose-50",
+      color: "text-rose-600"
+    },
+    {
+      label: "Support",
+      value: "Quality checked and store-backed support",
+      Icon: Truck,
+      bg: "bg-amber-50",
+      color: "text-amber-600"
+    }
+  ];
 
   const detailChips = visibleSpecSections
     .flatMap((section) => section.fields.map((field) => field.value))
@@ -275,8 +369,8 @@ export function ProductDetailPage() {
         <span className="text-[var(--vr-primary)]">{product.title}</span>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-        <section className="space-y-6">
+      <div className="xl:flex xl:gap-6 xl:items-start">
+        <section className="min-w-0 flex-1 space-y-6">
           <Card className="p-4 sm:p-5">
             {showVideo && product.videoUrl ? (
               <div className="relative aspect-square overflow-hidden rounded-[1.4rem] bg-black sm:aspect-[4/3]">
@@ -351,9 +445,427 @@ export function ProductDetailPage() {
               ) : null}
             </div>
           </Card>
+
+          {/* Key Specs — vertical list below product images */}
+          {false ? (
+            <>
+          {visibleSpecSections.length > 0 ? (
+            <div className="overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-white shadow-sm">
+              {/* Dark gradient header */}
+              <div className="flex items-center justify-between bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_100%)] px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
+                    <Cpu className="h-4 w-4 text-white/80" />
+                  </div>
+                  <span className="text-[12px] font-bold uppercase tracking-[0.24em] text-white">Key Specifications</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("specifications");
+                    document.getElementById("product-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-[11px] font-bold text-white/80 transition hover:bg-white/20 hover:text-white"
+                >
+                  View all
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+
+              {/* Vertical spec list — single column */}
+              <div className="divide-y divide-[var(--vr-border)]">
+                {(visibleSpecSections[0]?.fields ?? []).slice(0, 6).map((field) => {
+                  const meta = getSpecMeta(field.label);
+                  const SpecIcon = meta.Icon;
+                  return (
+                    <div
+                      key={field.label}
+                      className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--vr-surface-soft)]"
+                    >
+                      {/* Icon */}
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.85rem] ${meta.bg} transition group-hover:scale-105`}>
+                        <SpecIcon className={`h-5 w-5 ${meta.color}`} />
+                      </div>
+
+                      {/* Label + value */}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--vr-muted)]">
+                          {field.label}
+                        </div>
+                        <div className="mt-0.5 text-sm font-bold text-[var(--vr-text)]">
+                          {field.value}
+                        </div>
+                      </div>
+
+                      {/* Right arrow hint */}
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-200 transition group-hover:text-[var(--vr-primary)]" />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-5 py-3.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("specifications");
+                    document.getElementById("product-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  className="flex w-full items-center justify-between text-xs font-bold text-[var(--vr-primary)] transition hover:opacity-75"
+                >
+                  <span>View full specifications</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Warranty & Delivery — vertical list below images */}
+          <div className="overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-white shadow-sm">
+            <div className="flex items-center justify-between bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_100%)] px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
+                  <ShieldCheck className="h-4 w-4 text-white/80" />
+                </div>
+                <span className="text-[12px] font-bold uppercase tracking-[0.24em] text-white">About, Condition & Warranty</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("description");
+                  document.getElementById("product-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-[11px] font-bold text-white/80 transition hover:bg-white/20 hover:text-white"
+              >
+                View details
+                <ChevronRight className="h-3 w-3" />
+              </button>
+            </div>
+
+            <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className="border-b border-[var(--vr-border)] px-5 py-5 lg:border-b-0 lg:border-r">
+                <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--vr-primary)]">About this product</div>
+                <p className="mt-3 text-[15px] leading-8 text-[var(--vr-text)]">{aboutProductText}</p>
+                <div className="mt-5 grid gap-3">
+                  {aboutProductHighlights.map((item) => (
+                    <div key={item} className="flex items-start gap-3 rounded-[1rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--vr-primary)]" />
+                      <span className="text-sm leading-6 text-[var(--vr-text)]">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="divide-y divide-[var(--vr-border)]">
+                {conditionAndWarrantyRows.map((item) => {
+                  const ItemIcon = item.Icon;
+                  return (
+                    <div key={item.label} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--vr-surface-soft)]">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.85rem] ${item.bg} transition group-hover:scale-105`}>
+                        <ItemIcon className={`h-5 w-5 ${item.color}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--vr-muted)]">{item.label}</div>
+                        <div className="mt-1 text-sm font-bold text-[var(--vr-text)]">{item.value}</div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-200 transition group-hover:text-[var(--vr-primary)]" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+            </>
+          ) : null}
+
+          <Card id="product-tabs">
+            <div className="flex flex-wrap gap-6 border-b border-[var(--vr-border)]">
+              {([
+                ["description", "Description"],
+                ["specifications", "Key Specifications"],
+                ["about", "About, Condition & Warranty"],
+                ["reviews", "Reviews"],
+                ["shipping", "Shipping & Returns"]
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setActiveTab(value as DetailTab)}
+                  className={`relative -mb-px pb-3 text-sm font-semibold transition ${
+                    activeTab === value
+                      ? "border-b-2 border-[var(--vr-primary)] text-[var(--vr-primary)]"
+                      : "border-b-2 border-transparent text-[var(--vr-muted)] hover:text-[var(--vr-text)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === "description" ? (
+              <div className="pt-6">
+                <SectionHeader title={detailTemplate.label} description={aboutProductText} />
+                <div className="mt-5 grid gap-3">
+                  {detailTemplate.merchandisingPoints.map((item) => (
+                    <div key={item} className="flex items-start gap-3 rounded-[1.2rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--vr-primary)]" />
+                      <span className="text-sm leading-7 text-[var(--vr-text)]">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {activeTab === "specifications" ? (
+              <div className="space-y-6 pt-6">
+                {visibleSpecSections.length > 0 ? (
+                  <div className="overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-white shadow-sm">
+                    <div className="flex items-center justify-between bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_100%)] px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
+                          <Cpu className="h-4 w-4 text-white/80" />
+                        </div>
+                        <span className="text-[12px] font-bold uppercase tracking-[0.24em] text-white">Key Specifications</span>
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-[var(--vr-border)]">
+                      {(visibleSpecSections[0]?.fields ?? []).slice(0, 6).map((field) => {
+                        const meta = getSpecMeta(field.label);
+                        const SpecIcon = meta.Icon;
+                        return (
+                          <div key={field.label} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--vr-surface-soft)]">
+                            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.85rem] ${meta.bg} transition group-hover:scale-105`}>
+                              <SpecIcon className={`h-5 w-5 ${meta.color}`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--vr-muted)]">{field.label}</div>
+                              <div className="mt-0.5 text-sm font-bold text-[var(--vr-text)]">{field.value}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                {visibleSpecSections.map((section) => (
+                  <div key={section.title}>
+                    <h3 className="mb-5 text-xl font-bold text-[var(--vr-text)]">{section.title}</h3>
+                    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                      {section.fields.map((field) => {
+                        const meta = getSpecMeta(field.label);
+                        const SpecIcon = meta.Icon;
+                        return (
+                          <div
+                            key={`${section.title}-${field.label}`}
+                            className="rounded-2xl border border-[var(--vr-border)] bg-white p-6 shadow-sm transition hover:border-[var(--vr-primary)] hover:shadow-md"
+                          >
+                            <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${meta.bg}`}>
+                              <SpecIcon className={`h-7 w-7 ${meta.color}`} />
+                            </div>
+                            <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                              {field.label}
+                            </p>
+                            <p className="mt-1 text-base font-bold text-[var(--vr-text)]">
+                              {field.value}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {activeTab === "about" ? (
+              <div className="pt-6">
+                <div className="overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-white shadow-sm">
+                  <div className="flex items-center gap-3 bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_100%)] px-5 py-4">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
+                      <ShieldCheck className="h-4 w-4 text-white/80" />
+                    </div>
+                    <span className="text-[12px] font-bold uppercase tracking-[0.24em] text-white">About, Condition & Warranty</span>
+                  </div>
+
+                  <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+                    <div className="border-b border-[var(--vr-border)] px-5 py-5 lg:border-b-0 lg:border-r">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--vr-primary)]">About this product</div>
+                      <p className="mt-3 text-[15px] leading-8 text-[var(--vr-text)]">{aboutProductText}</p>
+                      <div className="mt-5 grid gap-3">
+                        {aboutProductHighlights.map((item) => (
+                          <div key={item} className="flex items-start gap-3 rounded-[1rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3">
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--vr-primary)]" />
+                            <span className="text-sm leading-6 text-[var(--vr-text)]">{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-[var(--vr-border)]">
+                      {conditionAndWarrantyRows.map((item) => {
+                        const ItemIcon = item.Icon;
+                        return (
+                          <div key={item.label} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--vr-surface-soft)]">
+                            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.85rem] ${item.bg} transition group-hover:scale-105`}>
+                              <ItemIcon className={`h-5 w-5 ${item.color}`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--vr-muted)]">{item.label}</div>
+                              <div className="mt-1 text-sm font-bold text-[var(--vr-text)]">{item.value}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {activeTab === "reviews" ? (
+              <div className="space-y-5 pt-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card variant="subtle">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Average Rating</div>
+                    <div className="mt-3 text-4xl font-extrabold text-[var(--vr-text)]">
+                      {averageRating !== null ? averageRating.toFixed(1) : "—"}
+                    </div>
+                    {averageRating !== null ? (
+                      <div className="mt-2">
+                        <StarRating value={Math.round(averageRating)} size="sm" />
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-[var(--vr-muted)]">No reviews yet.</p>
+                    )}
+                  </Card>
+                  <Card variant="subtle">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Total Reviews</div>
+                    <div className="mt-3 text-4xl font-extrabold text-[var(--vr-text)]">{reviews.length}</div>
+                    <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">Verified customer reviews submitted on this device.</p>
+                  </Card>
+                  <Card variant="subtle">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Write a Review</div>
+                    <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">Share your experience to help other buyers make confident decisions.</p>
+                  </Card>
+                </div>
+
+                <Card>
+                  <div className="text-base font-bold text-[var(--vr-text)]">Write a Review</div>
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <div className="mb-2 text-xs font-semibold text-[var(--vr-muted)]">Your Rating</div>
+                      <StarRating value={reviewForm.rating} onChange={(v) => setReviewForm((c) => ({ ...c, rating: v }))} />
+                    </div>
+                    <input
+                      className="vr-input"
+                      placeholder="Your name"
+                      value={reviewForm.authorName}
+                      onChange={(e) => setReviewForm((c) => ({ ...c, authorName: e.target.value }))}
+                    />
+                    <input
+                      className="vr-input"
+                      placeholder="Review title (e.g. Great value for money)"
+                      value={reviewForm.title}
+                      onChange={(e) => setReviewForm((c) => ({ ...c, title: e.target.value }))}
+                    />
+                    <textarea
+                      className="vr-input min-h-[100px] rounded-[1.3rem] py-3"
+                      placeholder="Describe your experience with this product..."
+                      value={reviewForm.body}
+                      onChange={(e) => setReviewForm((c) => ({ ...c, body: e.target.value }))}
+                    />
+                    <Button
+                      disabled={isSubmittingReview || !reviewForm.title.trim() || !reviewForm.body.trim() || !reviewForm.authorName.trim()}
+                      onClick={() => {
+                        setIsSubmittingReview(true);
+                        addReview({ ...reviewForm, verifiedPurchase: Boolean(user) });
+                        setReviewForm({ rating: 5, title: "", body: "", authorName: user?.name ?? "" });
+                        toast.success("Review submitted!");
+                        setIsSubmittingReview(false);
+                      }}
+                    >
+                      Submit Review
+                    </Button>
+                  </div>
+                </Card>
+
+                {reviews.length > 0 ? (
+                  <div className="space-y-3">
+                    {reviews.map((review) => (
+                      <Card key={review.id} variant="subtle">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <StarRating value={review.rating} size="sm" />
+                              {review.verifiedPurchase ? (
+                                <span className="rounded-full bg-[rgba(22,163,74,0.1)] px-2 py-0.5 text-[10px] font-semibold text-[var(--vr-success)]">Verified</span>
+                              ) : null}
+                            </div>
+                            <div className="mt-2 font-semibold text-[var(--vr-text)]">{review.title}</div>
+                            <p className="mt-1 text-sm leading-7 text-[var(--vr-muted)]">{review.body}</p>
+                            <div className="mt-2 text-xs text-slate-400">
+                              {review.authorName} · {new Date(review.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Card variant="subtle" className="text-center">
+                    <p className="text-sm text-[var(--vr-muted)]">Be the first to review this product.</p>
+                  </Card>
+                )}
+              </div>
+            ) : null}
+
+            {activeTab === "shipping" ? (
+              <div className="pt-6 space-y-6">
+                {/* Summary row — pulls live warranty/return data */}
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    { Icon: ShieldCheck, label: "Warranty", value: product.warrantyMonths ? `${product.warrantyMonths} months` : "Included", detail: product.warrantySummary ?? "Store-backed carry-in support" },
+                    { Icon: Undo2, label: "Returns", value: product.returnDays ? `${product.returnDays} days` : "Available", detail: "Easy return from fulfillment store" },
+                    { Icon: Truck, label: "Delivery", value: "Fast dispatch", detail: "Pickup or doorstep delivery" },
+                    { Icon: CheckCircle2, label: "Quality", value: "Multi-point check", detail: "Inspected before every dispatch" }
+                  ].map((item) => {
+                    const ItemIcon = item.Icon;
+                    return (
+                      <div key={item.label} className="flex flex-col gap-3 rounded-2xl border border-[var(--vr-border)] bg-white p-5">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-[0.75rem] bg-[rgba(30,58,138,0.08)]">
+                          <ItemIcon className="h-5 w-5 text-[var(--vr-primary)]" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--vr-muted)]">{item.label}</div>
+                          <div className="mt-1 text-base font-bold text-[var(--vr-text)]">{item.value}</div>
+                          <div className="mt-0.5 text-xs leading-5 text-[var(--vr-muted)]">{item.detail}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Condition and Readiness */}
+                <div className="rounded-2xl border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-6">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Condition and Readiness</div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {detailTemplate.merchandisingPoints.slice(0, 4).map((point) => (
+                      <div key={point} className="flex items-start gap-2.5 rounded-xl border border-[var(--vr-border)] bg-white px-4 py-3">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--vr-primary)]" />
+                        <span className="text-sm leading-6 text-[var(--vr-text)]">{point}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </Card>
         </section>
 
-        <aside className="xl:sticky xl:top-[13rem] xl:h-fit">
+        <aside className="xl:sticky xl:top-[13rem] xl:h-fit xl:w-[44%] xl:shrink-0">
           <Card className="p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip label={product.brandName ?? "VR Certified"} tone="muted" />
@@ -419,11 +931,9 @@ export function ProductDetailPage() {
                 fullWidth
                 size="lg"
                 onClick={handleAddToCart}
-                disabled={pendingCartAction !== null || !product.available}
+                disabled={pendingCartAction !== null}
               >
-                {!product.available
-                  ? "Currently Unavailable"
-                  : pendingCartAction === "cart" ? "Adding..." : "Add to Cart"}
+                {pendingCartAction === "cart" ? "Adding..." : "Add to Cart"}
               </Button>
               <Button variant="accent" fullWidth size="lg" onClick={handleBuyNow} disabled={pendingCartAction !== null}>
                 {pendingCartAction === "buyNow" ? "Continuing..." : "Buy Now"}
@@ -462,6 +972,8 @@ export function ProductDetailPage() {
                 {isInCompare(product.id) ? "In Comparison" : "Compare"}
               </Button>
             </div>
+
+
 
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="text-xs font-semibold text-[var(--vr-muted)]">Share:</span>
@@ -592,18 +1104,6 @@ export function ProductDetailPage() {
               </div>
             )}
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {trustHighlights.map((item) => (
-                <div key={item.title} className="rounded-[1.2rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4">
-                  <div className="flex items-center gap-2 text-[var(--vr-primary)]">
-                    <item.icon className="h-4 w-4" />
-                    <span className="text-sm font-semibold text-[var(--vr-text)]">{item.title}</span>
-                  </div>
-                  <div className="mt-2 text-xs leading-6 text-[var(--vr-muted)]">{item.subtitle}</div>
-                </div>
-              ))}
-            </div>
-
             <div className="mt-6 rounded-[1.4rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4 text-sm text-[var(--vr-muted)]">
               <div className="inline-flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-[var(--vr-primary)]" />
@@ -621,213 +1121,6 @@ export function ProductDetailPage() {
           </Card>
         </aside>
       </div>
-
-      <Card>
-        <div className="flex flex-wrap gap-2 border-b border-[var(--vr-border)] pb-4">
-          {[
-            ["description", "Description"],
-            ["specifications", "Specifications"],
-            ["reviews", "Reviews"],
-            ["shipping", "Shipping and Returns"]
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setActiveTab(value as DetailTab)}
-              className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
-                activeTab === value ? "bg-[var(--vr-primary)] text-white" : "bg-[var(--vr-surface-soft)] text-[var(--vr-muted)] hover:text-[var(--vr-primary)]"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "description" ? (
-          <div className="grid gap-6 pt-6 xl:grid-cols-[1fr_320px]">
-            <div>
-              <SectionHeader title={detailTemplate.label} description={product.description ?? detailTemplate.intro} />
-              <div className="mt-5 grid gap-3">
-                {detailTemplate.merchandisingPoints.map((item) => (
-                  <div key={item} className="rounded-[1.2rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3 text-sm leading-7 text-[var(--vr-text)]">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <Card variant="subtle">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Quick View</div>
-                <div className="mt-4 grid gap-3">
-                  {(visibleSpecSections[0]?.fields ?? []).slice(0, 4).map((field) => (
-                    <div key={field.label} className="rounded-[1rem] border border-[var(--vr-border)] bg-white px-4 py-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{field.label}</div>
-                      <div className="mt-2 text-sm font-semibold text-[var(--vr-text)]">{field.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              {getProductPrimaryImage(product) ? (
-                <Card variant="subtle">
-                  <img src={getProductPrimaryImage(product)} alt={product.title} className="mx-auto h-48 w-full object-contain" />
-                </Card>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === "specifications" ? (
-          <div className="space-y-4 pt-6">
-            {visibleSpecSections.map((section) => (
-              <Card key={section.title} variant="subtle">
-                <h3 className="text-lg font-bold text-[var(--vr-text)]">{section.title}</h3>
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {section.fields.map((field) => (
-                    <div key={`${section.title}-${field.label}`} className="rounded-[1.2rem] border border-[var(--vr-border)] bg-white p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{field.label}</div>
-                      <div className="mt-2 text-base font-semibold text-[var(--vr-text)]">{field.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : null}
-
-        {activeTab === "reviews" ? (
-          <div className="space-y-5 pt-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card variant="subtle">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Average Rating</div>
-                <div className="mt-3 text-4xl font-extrabold text-[var(--vr-text)]">
-                  {averageRating !== null ? averageRating.toFixed(1) : "—"}
-                </div>
-                {averageRating !== null ? (
-                  <div className="mt-2">
-                    <StarRating value={Math.round(averageRating)} size="sm" />
-                  </div>
-                ) : (
-                  <p className="mt-2 text-sm text-[var(--vr-muted)]">No reviews yet.</p>
-                )}
-              </Card>
-              <Card variant="subtle">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Total Reviews</div>
-                <div className="mt-3 text-4xl font-extrabold text-[var(--vr-text)]">{reviews.length}</div>
-                <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">Verified customer reviews submitted on this device.</p>
-              </Card>
-              <Card variant="subtle">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Write a Review</div>
-                <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">Share your experience to help other buyers make confident decisions.</p>
-              </Card>
-            </div>
-
-            <Card>
-              <div className="text-base font-bold text-[var(--vr-text)]">Write a Review</div>
-              <div className="mt-4 space-y-3">
-                <div>
-                  <div className="mb-2 text-xs font-semibold text-[var(--vr-muted)]">Your Rating</div>
-                  <StarRating value={reviewForm.rating} onChange={(v) => setReviewForm((c) => ({ ...c, rating: v }))} />
-                </div>
-                <input
-                  className="vr-input"
-                  placeholder="Your name"
-                  value={reviewForm.authorName}
-                  onChange={(e) => setReviewForm((c) => ({ ...c, authorName: e.target.value }))}
-                />
-                <input
-                  className="vr-input"
-                  placeholder="Review title (e.g. Great value for money)"
-                  value={reviewForm.title}
-                  onChange={(e) => setReviewForm((c) => ({ ...c, title: e.target.value }))}
-                />
-                <textarea
-                  className="vr-input min-h-[100px] rounded-[1.3rem] py-3"
-                  placeholder="Describe your experience with this product..."
-                  value={reviewForm.body}
-                  onChange={(e) => setReviewForm((c) => ({ ...c, body: e.target.value }))}
-                />
-                <Button
-                  disabled={isSubmittingReview || !reviewForm.title.trim() || !reviewForm.body.trim() || !reviewForm.authorName.trim()}
-                  onClick={() => {
-                    setIsSubmittingReview(true);
-                    addReview({ ...reviewForm, verifiedPurchase: Boolean(user) });
-                    setReviewForm({ rating: 5, title: "", body: "", authorName: user?.name ?? "" });
-                    toast.success("Review submitted!");
-                    setIsSubmittingReview(false);
-                  }}
-                >
-                  Submit Review
-                </Button>
-              </div>
-            </Card>
-
-            {reviews.length > 0 ? (
-              <div className="space-y-3">
-                {reviews.map((review) => (
-                  <Card key={review.id} variant="subtle">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <StarRating value={review.rating} size="sm" />
-                          {review.verifiedPurchase ? (
-                            <span className="rounded-full bg-[rgba(22,163,74,0.1)] px-2 py-0.5 text-[10px] font-semibold text-[var(--vr-success)]">Verified</span>
-                          ) : null}
-                        </div>
-                        <div className="mt-2 font-semibold text-[var(--vr-text)]">{review.title}</div>
-                        <p className="mt-1 text-sm leading-7 text-[var(--vr-muted)]">{review.body}</p>
-                        <div className="mt-2 text-xs text-slate-400">
-                          {review.authorName} · {new Date(review.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card variant="subtle" className="text-center">
-                <p className="text-sm text-[var(--vr-muted)]">Be the first to review this product.</p>
-              </Card>
-            )}
-          </div>
-        ) : null}
-
-        {activeTab === "shipping" ? (
-          <div className="grid gap-4 pt-6 xl:grid-cols-[1fr_0.95fr]">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card variant="subtle">
-                <div className="text-sm font-semibold text-[var(--vr-text)]">Warranty</div>
-                <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">{product.warrantySummary ?? "Store-backed warranty support across mapped branches."}</p>
-              </Card>
-              <Card variant="subtle">
-                <div className="text-sm font-semibold text-[var(--vr-text)]">Returns</div>
-                <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">{product.returnDays ? `${product.returnDays} day easy return window.` : "Return support available from your fulfillment store."}</p>
-              </Card>
-              <Card variant="subtle">
-                <div className="text-sm font-semibold text-[var(--vr-text)]">Delivery</div>
-                <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">Fast delivery or store pickup depending on branch availability.</p>
-              </Card>
-              <Card variant="subtle">
-                <div className="text-sm font-semibold text-[var(--vr-text)]">Support</div>
-                <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">Phone and WhatsApp support for product questions and order status.</p>
-              </Card>
-            </div>
-
-            <Card variant="subtle">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Condition and Readiness</div>
-              <div className="mt-4 grid gap-3">
-                {detailTemplate.merchandisingPoints.slice(0, 4).map((point) => (
-                  <div key={point} className="inline-flex items-start gap-2 text-sm leading-7 text-[var(--vr-muted)]">
-                    <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[var(--vr-primary)]" />
-                    <span>{point}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        ) : null}
-      </Card>
 
       <Card>
         <SectionHeader
@@ -909,12 +1202,26 @@ export function ProductDetailPage() {
             <div className="text-lg font-extrabold text-[var(--vr-text)]">{formatCurrency(product.price)}</div>
           </div>
           <div className="flex flex-1 gap-3">
-            <Button variant="secondary" fullWidth onClick={handleAddToCart} disabled={pendingCartAction !== null}>
-              Cart
-            </Button>
-            <Button variant="accent" fullWidth onClick={handleBuyNow} disabled={pendingCartAction !== null}>
-              Buy Now
-            </Button>
+            {!product.available ? (
+              <a
+                href={`https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(`Hi, is ${product.title} available?`)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#20bd5a]"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Check via WhatsApp
+              </a>
+            ) : (
+              <>
+                <Button variant="secondary" fullWidth onClick={handleAddToCart} disabled={pendingCartAction !== null}>
+                  Cart
+                </Button>
+                <Button variant="accent" fullWidth onClick={handleBuyNow} disabled={pendingCartAction !== null}>
+                  Buy Now
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </StickyMobileBar>

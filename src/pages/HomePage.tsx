@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
-import { ArrowRight, CheckCircle2, Clock, Laptop2, MapPin, ShieldCheck, Sparkles, Star, Store, Truck, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, Laptop2, MapPin, ShieldCheck, Sparkles, Star, Store, Truck, Undo2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ProductCard } from "components/catalog/ProductCard";
 import { getButtonClassName } from "components/ui/Button";
@@ -13,7 +13,7 @@ import { Badge } from "components/ui/Badge";
 import { BannerVideo } from "components/ui/BannerVideo";
 import { useSelectedStore } from "store/storeStore";
 import { catalogApi } from "api/client";
-import type { Category, Product } from "types";
+import type { Category, HomeSection, Product } from "types";
 import { getApiErrorMessage } from "../utils/api";
 import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
 import {
@@ -29,6 +29,16 @@ import { getVideoEmbedUrl, isDirectVideoUrl } from "../utils/media";
 
 const vrTechnologiesLogo = "/logo.jpg";
 const preferredCategoryOrder = ["Laptops", "Desktops", "Accessories", "Monitors", "Gaming Laptops", "MacBooks", "Workstations"];
+const homeSectionEyebrows = {
+  TODAYS_DEALS: "Today Deals",
+  FEATURED_PRODUCTS: "Featured Products",
+  BEST_SELLERS: "Best Sellers",
+  NEW_ARRIVALS: "New Arrivals",
+  TRENDING_PRODUCTS: "Trending Products",
+  RECOMMENDED_PRODUCTS: "Recommended Products",
+  TOP_RATED: "Top Rated",
+  LOW_PRICE_DEALS: "Low Price Deals"
+} as const;
 
 const trustBar = [
   { title: "Warranty Included", subtitle: "Coverage with every eligible product", icon: ShieldCheck },
@@ -92,22 +102,6 @@ function categoryPlaceholder(category: Category) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
-}
-
-function formatSpec(product: Product) {
-  return [product.processor, product.ramGb ? `${product.ramGb} GB RAM` : undefined, product.storageGb ? `${product.storageGb} GB storage` : undefined]
-    .filter(Boolean)
-    .join(" | ");
-}
-
-function getTodayDealEyebrow(product: Product) {
-  if (product.discountPercent && product.discountPercent > 0) {
-    return `${product.discountPercent}% Savings`;
-  }
-  if (product.categoryName) {
-    return `${product.categoryName} Deal`;
-  }
-  return "Limited-time offer";
 }
 
 function getDealCountdownTarget(products: Product[]) {
@@ -246,7 +240,6 @@ export function HomePage() {
   const useCaseBannersQuery = useQuery({ queryKey: ["banners", "USE_CASE"], queryFn: () => catalogApi.getBanners("USE_CASE") });
   const homeSectionsQuery = useQuery({ queryKey: ["home-sections"], queryFn: catalogApi.getHomeSections });
   const selectedStoreId = useSelectedStore((state) => state.selectedStoreId);
-  const bestSellersQuery = useQuery({ queryKey: ["home-best-sellers", selectedStoreId], queryFn: () => catalogApi.getBestSellers(6) });
   const allProductsQuery = useQuery({
     queryKey: ["home-products", selectedStoreId],
     queryFn: () => catalogApi.getProducts(selectedStoreId ? { storeId: selectedStoreId } : undefined)
@@ -262,6 +255,7 @@ export function HomePage() {
 
   const firstError =
     bannersQuery.error ?? homeSectionsQuery.error ?? allProductsQuery.error ?? categoriesQuery.error ?? storesQuery.error ?? null;
+  const hasCatalogError = Boolean(firstError);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -319,54 +313,43 @@ export function HomePage() {
   const heroCtaLabel = isMeaningfulCatalogValue(heroBanner?.ctaText) ? normalizeCatalogValue(heroBanner?.ctaText) : `Shop ${heroCategory?.name ?? "the collection"}`;
   const heroLinkIsExternal = heroLink.startsWith("http");
 
-  const featuredSection = useMemo(() => homeSections.find((section) => section.sectionType === "FEATURED_PRODUCTS") ?? null, [homeSections]);
-  const bestSellersSection = useMemo(() => homeSections.find((section) => section.sectionType === "BEST_SELLERS") ?? null, [homeSections]);
-  const newArrivalsSection = useMemo(() => homeSections.find((section) => section.sectionType === "NEW_ARRIVALS") ?? null, [homeSections]);
-  const todaysDealsSection = useMemo(() => homeSections.find((section) => section.sectionType === "TODAYS_DEALS") ?? null, [homeSections]);
   const spotlightProducts = useMemo(() => sortByMerchandisingPriority(allProducts), [allProducts]);
+  const homeProductSections = useMemo<HomeSection[]>(() => {
+    const configuredSections = [...homeSections]
+      .filter((section) => section.products.length > 0)
+      .sort((left, right) => {
+        const leftOrder = left.displayOrder ?? Number.MAX_SAFE_INTEGER;
+        const rightOrder = right.displayOrder ?? Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return (left.id ?? Number.MAX_SAFE_INTEGER) - (right.id ?? Number.MAX_SAFE_INTEGER);
+      });
+
+    if (configuredSections.length > 0) {
+      return configuredSections;
+    }
+
+      return spotlightProducts.length
+      ? [
+          {
+            id: -1,
+            title: "Featured Products",
+            subtitle: "Admin sections are empty right now, so we are showing the strongest live inventory instead.",
+            sectionType: "FEATURED_PRODUCTS" as const,
+            displayOrder: 0,
+            maxProducts: 8,
+            products: spotlightProducts.slice(0, 8)
+          }
+        ]
+      : [];
+  }, [homeSections, spotlightProducts]);
 
   const categoryCards = orderedCategories.slice(0, 4).map((category) => {
     const leadProduct = (productsByCategory.get(category.id) ?? [])[0];
     const previewImage = category.iconUrl ?? getProductPrimaryImage(leadProduct ?? { images: [] });
     return { category, previewImage };
   });
-
-  const featuredProducts = useMemo(() => {
-    const primary = featuredSection?.products.length ? featuredSection.products : spotlightProducts.filter((product) => product.featured);
-    const merged = new Map<number, Product>();
-    for (const product of primary) {
-      merged.set(product.id, product);
-    }
-    for (const product of spotlightProducts) {
-      if (merged.size >= 8) {
-        break;
-      }
-      merged.set(product.id, product);
-    }
-    return Array.from(merged.values()).slice(0, 8);
-  }, [featuredSection?.products, spotlightProducts]);
-
-  const bestSellerProducts = useMemo(() => {
-    if (bestSellersSection?.products.length) {
-      return bestSellersSection.products.slice(0, 8);
-    }
-    return (bestSellersQuery.data ?? []).slice(0, 8);
-  }, [bestSellersQuery.data, bestSellersSection?.products]);
-
-  const todaysDealProducts = useMemo(() => {
-    const configuredDeals = (todaysDealsSection?.products ?? []).filter((product) => isProductTodayDealActive(product));
-    if (configuredDeals.length) {
-      return sortByMerchandisingPriority(configuredDeals).slice(0, 4);
-    }
-    return sortByMerchandisingPriority(allProducts.filter((product) => isProductTodayDealActive(product))).slice(0, 4);
-  }, [allProducts, todaysDealsSection?.products]);
-
-  const newArrivalProducts = useMemo(() => {
-    if (newArrivalsSection?.products.length) {
-      return newArrivalsSection.products.slice(0, 8);
-    }
-    return [...allProducts].sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? "")).slice(0, 8);
-  }, [allProducts, newArrivalsSection?.products]);
 
   const nearbyStores = useMemo(
     () =>
@@ -383,8 +366,14 @@ export function HomePage() {
   );
 
   const todayDealsCountdown = useMemo(
-    () => (todaysDealProducts.length ? formatCountdown(getDealCountdownTarget(todaysDealProducts), now) : null),
-    [now, todaysDealProducts]
+    () => {
+      const products = homeProductSections
+        .filter((section) => section.sectionType === "TODAYS_DEALS")
+        .flatMap((section) => section.products)
+        .filter((product) => isProductTodayDealActive(product));
+      return products.length ? formatCountdown(getDealCountdownTarget(products), now) : null;
+    },
+    [homeProductSections, now]
   );
   const trustedCustomerCount = Math.max(500, stores.reduce((sum, store) => sum + (store.googleReviewCount ?? 0), 0));
   const averageStoreRating =
@@ -398,18 +387,6 @@ export function HomePage() {
     { value: Number(averageStoreRating), suffix: "/5", decimals: 1, label: "store rating", description: "Real branch trust signals shown near products." }
   ];
 
-  if (firstError) {
-    return (
-      <div className="vr-page-shell">
-        <Card className="border-rose-200 bg-rose-50 text-rose-700">
-          <div className="text-sm font-semibold uppercase tracking-[0.24em]">Catalog API Error</div>
-          <h1 className="mt-4 text-3xl font-bold text-rose-900">The homepage could not load catalog data.</h1>
-          <p className="mt-3 text-base">{getApiErrorMessage(firstError, "Check the backend server and VITE_API_BASE_URL configuration.")}</p>
-        </Card>
-      </div>
-    );
-  }
-
   if (bannersQuery.isLoading || homeSectionsQuery.isLoading || allProductsQuery.isLoading || categoriesQuery.isLoading || storesQuery.isLoading) {
     return <LoadingHomePage />;
   }
@@ -421,7 +398,19 @@ export function HomePage() {
 
   return (
     <div className="vr-page-shell space-y-6">
-      <section className="overflow-hidden rounded-[2rem] border border-[var(--vr-border)] bg-white p-3 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
+      {hasCatalogError ? (
+        <div className="flex items-start gap-3 rounded-[1.4rem] border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 shadow-[0_10px_26px_rgba(146,64,14,0.08)]">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="min-w-0">
+            <div className="text-sm font-bold">Catalog data is temporarily unavailable.</div>
+            <p className="mt-1 text-sm leading-6 text-amber-800">
+              {getApiErrorMessage(firstError, "Please check the backend server and API configuration.")}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <section className="overflow-hidden rounded-[2rem] border border-[var(--vr-border)] bg-white p-1.5 shadow-[0_22px_55px_rgba(15,23,42,0.08)] lg:sticky lg:top-[8.9rem] lg:z-20">
         <Link to={heroLink} className="block">
           <div
             className={`group relative overflow-hidden rounded-[1.7rem] ${
@@ -590,137 +579,51 @@ export function HomePage() {
         ))}
       </section>
 
-      {todaysDealProducts.length ? (
-        <section>
-          <SectionHeader
-            eyebrow="Today Deals"
-            title={todaysDealsSection?.title ?? "Today's Deals"}
-            action={
-              <div className="flex flex-wrap items-center gap-4">
-                {todayDealsCountdown ? <Badge tone="danger">Ends In {todayDealsCountdown}</Badge> : null}
-                <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
-                  View All <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            }
-          />
+      {homeProductSections.length > 0 ? (
+        <div className="space-y-8">
+          {homeProductSections.map((section) => {
+            const isDealsSection = section.sectionType === "TODAYS_DEALS";
+            const visibleProducts = section.products.slice(0, section.maxProducts ?? 8);
+            const eyebrow = homeSectionEyebrows[section.sectionType] ?? "Product Section";
 
-          <div className="mt-5 grid gap-4 xl:grid-cols-4">
-            {todaysDealProducts.map((product) => (
-              <Card key={product.id} variant="hero" className="vr-card-lift overflow-hidden p-0">
-                <Link to={`/products/${product.id}`} className="block h-full">
-                  <div className="flex h-full flex-col">
-                    <div className="border-b border-[var(--vr-border)] bg-[linear-gradient(135deg,#0f172a,#1e3a8a)] px-5 py-4 text-white">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#fde68a]">{getTodayDealEyebrow(product)}</div>
-                      <div className="mt-2 text-xl font-bold">{product.title}</div>
+            return (
+              <section
+                key={`${section.sectionType}-${section.id ?? section.title}`}
+                className="rounded-[1.9rem] border border-[var(--vr-border)] bg-white px-5 py-5 shadow-[0_18px_44px_rgba(15,23,42,0.06)] lg:px-6 lg:py-6"
+              >
+                <SectionHeader
+                  eyebrow={eyebrow}
+                  title={section.title}
+                  description={section.subtitle}
+                  action={
+                    <div className="flex flex-wrap items-center gap-3">
+                      {isDealsSection && todayDealsCountdown ? <Badge tone="danger">Ends In {todayDealsCountdown}</Badge> : null}
+                      <Link
+                        to="/products"
+                        className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]"
+                      >
+                        View All <ArrowRight className="h-4 w-4" />
+                      </Link>
                     </div>
-                    <div className="flex flex-1 flex-col justify-between gap-4 p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="max-w-[58%]">
-                          <p className="text-sm leading-7 text-[var(--vr-muted)]">{formatSpec(product) || "Curated for customers who need a strong deal fast."}</p>
-                          <div className="mt-4 text-2xl font-extrabold text-[var(--vr-text)]">{formatCurrency(product.price)}</div>
-                          {product.originalPrice ? <div className="mt-1 text-sm text-slate-400 line-through">{formatCurrency(product.originalPrice)}</div> : null}
-                        </div>
-                        {getProductPrimaryImage(product) ? (
-                          <img src={getProductPrimaryImage(product)} alt={product.title} className="h-28 w-28 object-contain" />
-                        ) : null}
-                      </div>
-                      <div className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
-                        Shop this deal
-                        <ArrowRight className="h-4 w-4" />
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </Card>
-            ))}
-          </div>
-        </section>
-      ) : null}
+                  }
+                />
 
-      {/* <section className="rounded-[1.9rem] bg-[linear-gradient(135deg,#0f172a,#1e3a8a)] px-5 py-6 text-white shadow-[0_22px_52px_rgba(15,23,42,0.18)]">
-        <SectionHeader
-          eyebrow="Why Customers Convert"
-          title="Trust signals that reduce hesitation"
-          description="Warranty, quality checks, returns, and delivery assurance should stay visible before the customer reaches checkout."
-        />
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {trustBar.map((item) => (
-            <div key={item.title} className="rounded-[1.35rem] border border-white/10 bg-white/10 p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-white/14 p-2.5 text-[#fde68a]">
-                  <item.icon className="h-4 w-4" />
+                <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {visibleProducts.map((product) => (
+                    <ProductCard key={`${section.sectionType}-${product.id}`} product={product} />
+                  ))}
                 </div>
-                <div>
-                  <div className="text-sm font-semibold">{item.title}</div>
-                  <div className="mt-1 text-xs text-white/70">{item.subtitle}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+              </section>
+            );
+          })}
         </div>
-      </section> */}
-
-      <section>
-        <SectionHeader
-          eyebrow="Featured Products"
-          title={featuredSection?.title ?? "Handpicked picks worth spotlighting"}
-          action={
-            <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
-              View All <ArrowRight className="h-4 w-4" />
-            </Link>
-          }
+      ) : (
+        <EmptyState
+          eyebrow="Home Sections"
+          title="Homepage sections will appear here."
+          description="Publish sections from the admin panel to control homepage product rows and their order."
         />
-        <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {featuredProducts.slice(0, 8).map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <SectionHeader
-          eyebrow="Best Sellers"
-          title={bestSellersSection?.title ?? "Our most-loved picks"}
-          action={
-            <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
-              View All <ArrowRight className="h-4 w-4" />
-            </Link>
-          }
-        />
-        {bestSellerProducts.length ? (
-          <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {bestSellerProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-5">
-            <EmptyState
-              eyebrow="Best Sellers"
-              title="Best seller cards will appear here."
-              description="Mark products as best sellers in admin or build order history to populate this section automatically."
-            />
-          </div>
-        )}
-      </section>
-
-      <section>
-        <SectionHeader
-          eyebrow="New Arrivals"
-          title={newArrivalsSection?.title ?? "Fresh arrivals - just in"}
-          action={
-            <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
-              View All <ArrowRight className="h-4 w-4" />
-            </Link>
-          }
-        />
-        <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {newArrivalProducts.slice(0, 8).map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      </section>
+      )}
 
       {recentlyViewed.length > 0 ? (
         <section>

@@ -30,7 +30,7 @@ export function SortDropdown<T extends string>({ value, options, onChange }: Sor
 
   return (
     <div ref={ref} className="relative min-w-[240px]">
-      <button type="button" onClick={() => setOpen((current) => !current)} className="vr-input flex w-full items-center justify-between bg-white">
+      <button type="button" onClick={() => setOpen((current) => !current)} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:border-[var(--vr-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(30,58,138,0.1)]">
         <span>{activeLabel}</span>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
       </button>

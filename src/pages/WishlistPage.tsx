@@ -7,6 +7,8 @@ import toast from "react-hot-toast";
 import { customerApi } from "api/client";
 import { useWishlist } from "../hooks/useWishlist";
 import { useAuthStore } from "store/authStore";
+import { useCartStore } from "store/cartStore";
+import { useWishlistStore } from "store/wishlistStore";
 import type { Product } from "types";
 import { getApiErrorMessage } from "../utils/api";
 import { showCartToast } from "../utils/cartNotifications";
@@ -24,6 +26,8 @@ export function WishlistPage() {
   usePageMeta({ title: "My Wishlist", description: "Your saved products at VR Technologies. Add items to cart or share your wishlist with others." });
   const { wishlist, toggleWishlist, isWishlistUpdating } = useWishlist();
   const user = useAuthStore((state) => state.user);
+  const addGuestCartItem = useCartStore((state) => state.addGuestCartItem);
+  const removeGuestWishlistItem = useWishlistStore((state) => state.removeGuestWishlistItem);
   const queryClient = useQueryClient();
   const [addingToCart, setAddingToCart] = useState<number | null>(null);
 
@@ -40,13 +44,26 @@ export function WishlistPage() {
   }
 
   async function handleAddToCart(product: Product) {
-    if (!user) { toast.error("Login to add items to cart"); return; }
     const productId = product.id;
     if (addingToCart === productId) return;
+
+    if (!user) {
+      addGuestCartItem(product, 1);
+      removeGuestWishlistItem(productId);
+      showCartToast({
+        variant: "saved",
+        productTitle: product.title,
+        items: useCartStore.getState().guestCart
+      });
+      return;
+    }
+
     setAddingToCart(productId);
     try {
       const nextCart = await customerApi.addToCart(productId, 1);
+      const nextWishlist = await customerApi.removeFromWishlist(productId);
       queryClient.setQueryData(["cart"], nextCart);
+      queryClient.setQueryData(["wishlist"], nextWishlist);
       showCartToast({ variant: "added", productTitle: product.title, items: nextCart });
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to add to cart"));

@@ -1,8 +1,8 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
-import { Boxes, ChevronRight, Search, SlidersHorizontal, Sparkles } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Boxes, CheckCircle2, Grid3X3, SlidersHorizontal } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { FilterChips } from "components/catalog/FilterChips";
 import { FilterSidebar } from "components/catalog/FilterSidebar";
 import { ProductCard } from "components/catalog/ProductCard";
@@ -11,16 +11,13 @@ import { Button, getButtonClassName } from "components/ui/Button";
 import { Card } from "components/ui/Card";
 import { EmptyState } from "components/ui/EmptyState";
 import { FilterDrawer } from "components/ui/FilterDrawer";
-import { SectionHeader } from "components/ui/SectionHeader";
 import { SkeletonLoader } from "components/ui/SkeletonLoader";
 import { StaggerGrid, StaggerItem } from "components/ui/StaggerGrid";
-import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { getApiErrorMessage } from "../utils/api";
 import { formatConditionLabel, formatCurrency, getProductDerivedRating, getProductMerchandisingScore } from "../utils/catalog";
 import {
   buildCatalogFilterCounts,
   type CatalogFilterState,
-  conditionOptions,
   formatStorageOption,
   initialCatalogFilters,
   matchesCatalogFilters,
@@ -28,6 +25,8 @@ import {
 } from "../utils/catalogFilters";
 import { catalogApi } from "api/client";
 import { useSelectedStore } from "store/storeStore";
+import { SiteFooter } from "components/layouts/SiteFooter";
+import { footerPolicyLinks, footerSupportLinks, vrTechnologiesLogo } from "../constants/siteConfig";
 import type { ProductCondition } from "types";
 
 type SortOption = "best-sellers" | "price-low" | "price-high" | "newest" | "highest-rated";
@@ -116,19 +115,16 @@ function normalizePriceFilterState(filters: CatalogFilterState, bounds: { min: n
 
 function ProductListingSkeleton() {
   return (
-    <div className="vr-page-shell space-y-6">
-      <Card>
-        <SkeletonLoader className="h-8 w-40" />
-        <SkeletonLoader lines={2} className="mt-4" />
-        <div className="mt-5 flex gap-3">
-          <SkeletonLoader className="h-11 w-36" />
-          <SkeletonLoader className="h-11 w-44" />
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1600px] space-y-6">
+          <div className="flex flex-col gap-6 lg:h-[calc(100vh-var(--sticky-offset,9.5rem)-1.5rem)] lg:flex-row lg:items-start lg:overflow-hidden">
+            <SkeletonLoader className="hidden h-[760px] w-[280px] shrink-0 rounded-[2rem] lg:block" />
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {Array.from({ length: 6 }).map((_, index) => (
+              <SkeletonLoader key={index} className="h-[420px] rounded-[2rem]" />
+            ))}
+          </div>
         </div>
-      </Card>
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <SkeletonLoader key={index} className="h-[420px]" />
-        ))}
       </div>
     </div>
   );
@@ -141,8 +137,9 @@ export function ProductsPage() {
   const [mobileDraftFilters, setMobileDraftFilters] = useState<CatalogFilterState>(initialCatalogFilters);
   const [sortBy, setSortBy] = useState<SortOption>("best-sellers");
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  const [mobileDraftSortBy, setMobileDraftSortBy] = useState<SortOption>("best-sellers");
+  const [isSortDrawerOpen, setIsSortDrawerOpen] = useState(false);
   const [hasHydratedFilters, setHasHydratedFilters] = useState(false);
-  const debouncedSearchQuery = useDebouncedValue(filters.q, 300);
   const gridTopRef = useRef<HTMLDivElement | null>(null);
   const previousAppliedKeyRef = useRef<string | null>(null);
   const isApplyingUrlStateRef = useRef(false);
@@ -187,6 +184,30 @@ export function ProductsPage() {
     [catalogProducts]
   );
 
+  const displayOptions = useMemo(
+    () =>
+      Array.from(new Set(catalogProducts.map((product) => product.displaySize?.trim()).filter(Boolean) as string[])).sort((left, right) =>
+        left.localeCompare(right)
+      ),
+    [catalogProducts]
+  );
+
+  const osOptions = useMemo(
+    () =>
+      Array.from(new Set(catalogProducts.map((product) => product.os?.trim()).filter(Boolean) as string[])).sort((left, right) =>
+        left.localeCompare(right)
+      ),
+    [catalogProducts]
+  );
+
+  const graphicsOptions = useMemo(
+    () =>
+      Array.from(new Set(catalogProducts.map((product) => product.graphicsCard?.trim()).filter(Boolean) as string[])).sort((left, right) =>
+        left.localeCompare(right)
+      ),
+    [catalogProducts]
+  );
+
   const allCatalogPriceBounds = useMemo(() => getCatalogPriceBounds(catalogProducts), [catalogProducts]);
   const priceReferenceProducts = useMemo(() => {
     const scopedFilters = { ...filters, minPrice: "", maxPrice: "" };
@@ -197,13 +218,7 @@ export function ProductsPage() {
     () => getCatalogPriceBounds(priceReferenceProducts, allCatalogPriceBounds),
     [allCatalogPriceBounds, priceReferenceProducts]
   );
-  const appliedFilters = useMemo(
-    () => ({
-      ...filters,
-      q: debouncedSearchQuery
-    }),
-    [debouncedSearchQuery, filters]
-  );
+  const appliedFilters = useMemo(() => filters, [filters]);
 
   useEffect(() => {
     if (!brands.length || !categories.length) {
@@ -215,6 +230,10 @@ export function ProductsPage() {
     const processorParam = searchParams.get("processor");
     const ramParam = searchParams.get("ram");
     const storageParam = searchParams.get("storage");
+    const displayParam = searchParams.get("display");
+    const osParam = searchParams.get("os");
+    const graphicsParam = searchParams.get("graphics");
+    const featuredParam = searchParams.get("featured");
     const conditionParam = searchParams.get("condition");
     const availabilityParam = searchParams.get("availability");
     const priceParam = searchParams.get("price");
@@ -233,6 +252,9 @@ export function ProductsPage() {
       );
 
     const nextProcessors = processorParam ? processorParam.split(",").map((value) => value.trim()).filter(Boolean) : [];
+    const nextDisplays = displayParam ? displayParam.split(",").map((value) => value.trim()).filter(Boolean) : [];
+    const nextOs = osParam ? osParam.split(",").map((value) => value.trim()).filter(Boolean) : [];
+    const nextGraphics = graphicsParam ? graphicsParam.split(",").map((value) => value.trim()).filter(Boolean) : [];
     const nextRamOptions = ramParam
       ? ramParam
           .split(",")
@@ -261,6 +283,10 @@ export function ProductsPage() {
       processorOptions: Array.from(new Set(nextProcessors)),
       ramOptions: Array.from(new Set(nextRamOptions)),
       storageOptions: Array.from(new Set(nextStorageOptions)),
+      displayOptions: Array.from(new Set(nextDisplays)),
+      osOptions: Array.from(new Set(nextOs)),
+      graphicsOptions: Array.from(new Set(nextGraphics)),
+      featuredOnly: featuredParam === "true" || featuredParam === "1",
       conditions: Array.from(new Set(nextConditions)),
       inStockOnly: availabilityParam === "in-stock" || availabilityParam === "stock",
       minPrice: priceMinParam ?? searchParams.get("minPrice") ?? "",
@@ -304,15 +330,25 @@ export function ProductsPage() {
       nextParams.set("q", filters.q.trim());
     }
     if (filters.brandIds.length) {
-      const brandParamKey = filters.brandIds.length === 1 ? "brandId" : "brandIds";
-      nextParams.set(brandParamKey, filters.brandIds.join(","));
+      nextParams.set(filters.brandIds.length === 1 ? "brandId" : "brandIds", filters.brandIds.join(","));
     }
     if (filters.categoryIds.length) {
-      const categoryParamKey = filters.categoryIds.length === 1 ? "categoryId" : "categoryIds";
-      nextParams.set(categoryParamKey, filters.categoryIds.join(","));
+      nextParams.set(filters.categoryIds.length === 1 ? "categoryId" : "categoryIds", filters.categoryIds.join(","));
     }
     if (filters.processorOptions.length) {
       nextParams.set("processor", filters.processorOptions.join(","));
+    }
+    if (filters.displayOptions.length) {
+      nextParams.set("display", filters.displayOptions.join(","));
+    }
+    if (filters.osOptions.length) {
+      nextParams.set("os", filters.osOptions.join(","));
+    }
+    if (filters.graphicsOptions.length) {
+      nextParams.set("graphics", filters.graphicsOptions.join(","));
+    }
+    if (filters.featuredOnly) {
+      nextParams.set("featured", "true");
     }
     if (filters.ramOptions.length) {
       nextParams.set("ram", filters.ramOptions.map((value) => `${value}gb`).join(","));
@@ -372,6 +408,10 @@ export function ProductsPage() {
       categoryIds: appliedFilters.categoryIds.length > 1 ? appliedFilters.categoryIds.join(",") : undefined,
       storeId: activeStoreId,
       processorOptions: appliedFilters.processorOptions.length ? appliedFilters.processorOptions.join(",") : undefined,
+      displayOptions: appliedFilters.displayOptions.length ? appliedFilters.displayOptions.join(",") : undefined,
+      osOptions: appliedFilters.osOptions.length ? appliedFilters.osOptions.join(",") : undefined,
+      graphicsOptions: appliedFilters.graphicsOptions.length ? appliedFilters.graphicsOptions.join(",") : undefined,
+      featuredOnly: appliedFilters.featuredOnly ? true : undefined,
       ramOptions: appliedFilters.ramOptions.length ? appliedFilters.ramOptions.join(",") : undefined,
       storageOptions: appliedFilters.storageOptions.length ? appliedFilters.storageOptions.join(",") : undefined,
       conditions: appliedFilters.conditions.length ? appliedFilters.conditions.join(",") : undefined,
@@ -481,6 +521,38 @@ export function ProductsPage() {
       });
     }
 
+    for (const display of filters.displayOptions) {
+      labels.push({
+        key: `display-${display}`,
+        label: display,
+        onRemove: () => setFilters((current) => ({ ...current, displayOptions: current.displayOptions.filter((item) => item !== display) }))
+      });
+    }
+
+    for (const os of filters.osOptions) {
+      labels.push({
+        key: `os-${os}`,
+        label: os,
+        onRemove: () => setFilters((current) => ({ ...current, osOptions: current.osOptions.filter((item) => item !== os) }))
+      });
+    }
+
+    for (const graphics of filters.graphicsOptions) {
+      labels.push({
+        key: `graphics-${graphics}`,
+        label: graphics,
+        onRemove: () => setFilters((current) => ({ ...current, graphicsOptions: current.graphicsOptions.filter((item) => item !== graphics) }))
+      });
+    }
+
+    if (filters.featuredOnly) {
+      labels.push({
+        key: "featured",
+        label: "Featured Products",
+        onRemove: () => setFilters((current) => ({ ...current, featuredOnly: false }))
+      });
+    }
+
     for (const condition of filters.conditions) {
       labels.push({
         key: `condition-${condition}`,
@@ -510,28 +582,17 @@ export function ProductsPage() {
     return labels;
   }, [activeStore, brands, categories, clearSelectedStore, filters, priceBounds.max, priceBounds.min, searchParams, setSearchParams, urlStoreId]);
 
-  const sortOptions: Array<{ value: SortOption; label: string }> = [
-    { value: "best-sellers", label: "Best Sellers" },
-    { value: "price-low", label: "Price: Low to High" },
-    { value: "price-high", label: "Price: High to Low" },
-    { value: "newest", label: "Newest First" },
-    { value: "highest-rated", label: "Highest Rated" }
+  const sortOptions: Array<{ value: SortOption; label: string; description: string }> = [
+    { value: "best-sellers", label: "Relevance", description: "Balanced mix of popular, featured, and buyer-friendly products." },
+    { value: "newest", label: "Most Recent", description: "Show the latest products added to the catalog first." },
+    { value: "price-high", label: "Highest Price", description: "Premium and higher-spec options first." },
+    { value: "price-low", label: "Lowest Price", description: "Budget-first browsing with lower prices at the top." },
+    { value: "highest-rated", label: "Best Rated", description: "Products with stronger ratings and review value first." }
   ];
 
   const activeCategory = categories.find((category) => filters.categoryIds.includes(category.id));
   const activeBrand = brands.find((brand) => filters.brandIds.includes(brand.id));
-  const quickBrowseCategories = useMemo(
-    () =>
-      categories
-        .map((category) => ({
-          category,
-          count: filterCounts.categoryCounts[category.id] ?? 0,
-          active: filters.categoryIds.includes(category.id)
-        }))
-        .filter((item) => item.active || item.count > 0)
-        .slice(0, 6),
-    [categories, filterCounts.categoryCounts, filters.categoryIds]
-  );
+
   const alternativeCategoriesForBrand = useMemo(
     () =>
       activeBrand
@@ -582,17 +643,12 @@ export function ProductsPage() {
         : activeStore?.name
           ? `Products at ${activeStore.name}`
           : "All Products";
-  const storeBadge = activeStore?.name ? `Available at ${activeStore.name}.` : null;
-  const pageDescription = displayProducts.length
-    ? activeBrand && activeCategory
-      ? `Showing ${activeCategory.name.toLowerCase()} products from ${activeBrand.name}.${storeBadge ? ` ${storeBadge}` : ""}`
-      : activeCategory?.name
-        ? `Showing only ${activeCategory.name.toLowerCase()} from the live catalog.${storeBadge ? ` ${storeBadge}` : ""}`
-        : activeBrand?.name
-          ? `Showing only products from ${activeBrand.name}.${storeBadge ? ` ${storeBadge}` : ""}`
-          : storeBadge ?? "Explore live inventory with sticky filters, product counts, URL-synced chips, and a cleaner mobile filtering flow."
-    : emptyResultsDescription;
+
   const firstError = brandsQuery.error ?? categoriesQuery.error ?? catalogProductsQuery.error ?? productsQuery.error ?? null;
+  const mobilePreviewCount = useMemo(() => {
+    const normalizedDraft = normalizePriceFilterState(mobileDraftFilters, priceBounds);
+    return catalogProducts.filter((product) => matchesCatalogFilters(product, normalizedDraft)).length;
+  }, [catalogProducts, mobileDraftFilters, priceBounds]);
 
   useEffect(() => {
     const appliedKey = JSON.stringify({ filters: appliedFilters, sortBy });
@@ -617,6 +673,26 @@ export function ProductsPage() {
     }
   }, [filters, isFilterDrawerOpen]);
 
+  useEffect(() => {
+    if (isSortDrawerOpen) {
+      setMobileDraftSortBy(sortBy);
+    }
+  }, [isSortDrawerOpen, sortBy]);
+
+  useEffect(() => {
+    if (!isFilterDrawerOpen && !isSortDrawerOpen) {
+      return;
+    }
+
+    document.body.style.overflow = "hidden";
+    document.body.dataset.mobileOverlay = "true";
+
+    return () => {
+      document.body.style.overflow = "";
+      delete document.body.dataset.mobileOverlay;
+    };
+  }, [isFilterDrawerOpen, isSortDrawerOpen]);
+
   function resetAllFilters() {
     startTransition(() => {
       setFilters(initialCatalogFilters);
@@ -632,21 +708,11 @@ export function ProductsPage() {
     setIsFilterDrawerOpen(false);
   }
 
-  function applyQuickCategory(categoryId?: number) {
+  function applyMobileSort() {
     startTransition(() => {
-      setFilters((current) => ({
-        ...current,
-        categoryIds: categoryId ? [categoryId] : [],
-        minPrice: "",
-        maxPrice: ""
-      }));
-      setMobileDraftFilters((current) => ({
-        ...current,
-        categoryIds: categoryId ? [categoryId] : [],
-        minPrice: "",
-        maxPrice: ""
-      }));
+      setSortBy(mobileDraftSortBy);
     });
+    setIsSortDrawerOpen(false);
   }
 
   if (firstError) {
@@ -666,183 +732,217 @@ export function ProductsPage() {
   }
 
   return (
-    <div className="vr-page-shell space-y-6">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-        <Link to="/" className="transition hover:text-slate-700">
-          Home
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span>Products</span>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-[var(--vr-primary)]">{pageTitle}</span>
-      </div>
-
-      {activeStore ? (
-        <Card className="border-[var(--vr-primary)] bg-[rgba(30,58,138,0.04)]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Branch view</div>
-              <div className="mt-1 text-base font-bold text-[var(--vr-text)]">
-                Showing products at {activeStore.name}, {activeStore.city}
-              </div>
-              <div className="mt-1 text-xs text-[var(--vr-muted)]">All categories — laptops, monitors, accessories — available from this branch.</div>
-            </div>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center rounded-2xl border border-[var(--vr-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--vr-text)]"
-              onClick={() => {
-                const nextParams = new URLSearchParams(searchParams);
-                nextParams.delete("storeId");
-                setSearchParams(nextParams, { replace: true });
-              }}
-            >
-              View all branches
-            </button>
-          </div>
-        </Card>
-      ) : null}
-
-      <div ref={gridTopRef}>
-        <Card variant="hero">
-          <SectionHeader
-            eyebrow="Catalog"
-            title={pageTitle}
-            description={pageDescription}
-            action={
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="rounded-full border border-[var(--vr-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--vr-text)]">
-                  {displayProducts.length} products
-                </span>
-                <Button variant="secondary" className="lg:hidden" icon={<SlidersHorizontal className="h-4 w-4" />} onClick={() => setIsFilterDrawerOpen(true)}>
-                  Filter
-                </Button>
-              </div>
-            }
-          />
-
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => applyQuickCategory()}
-              className={filters.categoryIds.length ? "vr-filter-shortcut" : "vr-filter-shortcut vr-filter-shortcut-active"}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              All Categories
-            </button>
-            {quickBrowseCategories.map(({ category, count, active }) => (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => applyQuickCategory(category.id)}
-                className={active ? "vr-filter-shortcut vr-filter-shortcut-active" : "vr-filter-shortcut"}
-              >
-                <span>{category.name}</span>
-                <span className="rounded-full bg-[var(--vr-surface-soft)] px-2 py-1 text-[10px] font-bold text-[var(--vr-primary)]">
-                  {count}
-                </span>
-              </button>
-            ))}
-            <div className="ml-auto rounded-full border border-[var(--vr-border)] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--vr-muted)]">
-              Live price span {formatCurrency(priceBounds.min)} to {formatCurrency(priceBounds.max)}
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_260px]">
-            <div className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--vr-text)]">
-                <Search className="h-4 w-4 text-[var(--vr-primary)]" />
-                Search and selected filters
-              </div>
-              <div className="mt-3">
-                <FilterChips items={activeFilterLabels} onClearAll={resetAllFilters} />
+    <>
+    <div className="bg-[#eef3fb] pb-[88px] lg:pb-0">
+      <div className="px-4 pt-5 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1600px]">
+          {activeStore ? (
+            <div className="mb-5 rounded-[1.6rem] border border-[rgba(30,58,138,0.12)] bg-[rgba(30,58,138,0.05)] px-5 py-4 shadow-[0_12px_30px_rgba(30,58,138,0.06)]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--vr-primary)]">Branch view</div>
+                  <div className="mt-1 text-base font-bold text-[var(--vr-text)]">
+                    Showing products at {activeStore.name}, {activeStore.city}
+                  </div>
+                  <div className="mt-1 text-sm text-[var(--vr-muted)]">Inventory is currently scoped to this branch. Remove the branch filter to browse all stores.</div>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-2xl border border-[var(--vr-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--vr-text)]"
+                  onClick={() => {
+                    const nextParams = new URLSearchParams(searchParams);
+                    nextParams.delete("storeId");
+                    setSearchParams(nextParams, { replace: true });
+                  }}
+                >
+                  View all branches
+                </button>
               </div>
             </div>
+          ) : null}
 
-            <SortDropdown value={sortBy} options={sortOptions} onChange={setSortBy} />
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <FilterSidebar
-          brands={brands}
-          categories={categories}
-          processors={processorOptions}
-          ramOptions={ramOptions}
-          storageOptions={storageOptions}
-          priceBounds={priceBounds}
-          counts={filterCounts}
-          state={filters}
-          setState={setFilters}
-          onClear={resetAllFilters}
-          className="hidden lg:block"
-        />
-
-        <section className="space-y-5">
-          {productsQuery.isFetching ? (
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <SkeletonLoader key={index} className="h-[420px]" />
-              ))}
+          <div className="flex flex-col gap-6 lg:flex-row">
+            {/* Sidebar column: this div is the flex item and stretches to the full products height,
+                giving the sticky aside inside it the correct bounds throughout the entire product list */}
+            <div className="hidden lg:block lg:h-full lg:w-[280px] lg:shrink-0">
+              <FilterSidebar
+                brands={brands}
+                categories={categories}
+                processors={processorOptions}
+                ramOptions={ramOptions}
+                storageOptions={storageOptions}
+                displayOptions={displayOptions}
+                osOptions={osOptions}
+                graphicsOptions={graphicsOptions}
+                priceBounds={priceBounds}
+                counts={filterCounts}
+                state={filters}
+                setState={setFilters}
+                onClear={resetAllFilters}
+                sticky={false}
+                className="lg:h-full"
+              />
             </div>
-          ) : displayProducts.length ? (
-            <StaggerGrid className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {displayProducts.map((product) => (
-                <StaggerItem key={product.id}>
-                  <ProductCard product={product} />
-                </StaggerItem>
-              ))}
-            </StaggerGrid>
-          ) : (
-            <EmptyState
-              eyebrow="No Products Found"
-              title={activeStore && filters.q.trim() ? `No "${filters.q.trim()}" matches at ${activeStore.name}` : "No products found"}
-              description={
-                activeStore && filters.q.trim()
-                  ? `Nothing matched at ${activeStore.name}. Search across all branches or pick a different branch.`
-                  : emptyResultsDescription
-              }
-              action={
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  {activeStore ? (
-                    <button
-                      className={getButtonClassName({ variant: "primary" })}
-                      onClick={() => {
-                        const nextParams = new URLSearchParams(searchParams);
-                        nextParams.delete("storeId");
-                        setSearchParams(nextParams, { replace: true });
-                      }}
-                    >
-                      Search all branches
-                    </button>
-                  ) : (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--vr-muted)]">
-                      <Boxes className="h-4 w-4 text-[var(--vr-primary)]" />
-                      Try adjusting your filters
+
+            <div className="min-w-0 flex-1 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+              <div ref={gridTopRef} className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+                {/* ── Desktop toolbar — sticky at same level as sidebar ── */}
+                <div className="mb-4 hidden overflow-hidden rounded-2xl border border-[rgba(30,58,138,0.08)] bg-white shadow-[0_8px_28px_rgba(15,23,42,0.06)] lg:sticky lg:top-0 lg:z-20 lg:block">
+                  <div className="flex items-center justify-between gap-4 border-b border-[var(--vr-border)] px-5 py-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <div className="text-[10px] font-extrabold uppercase tracking-[0.28em] text-[var(--vr-primary)]">Available products</div>
+                          <h2 className="mt-0.5 text-xl font-extrabold text-[var(--vr-text)]">{pageTitle}</h2>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center rounded-full bg-[var(--vr-primary)] px-3 py-1 text-[11px] font-bold text-white">
+                            {displayProducts.length}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-3 py-1 text-[11px] font-semibold text-[var(--vr-muted)]">
+                            <Grid3X3 className="h-3 w-3 text-[var(--vr-primary)]" />
+                            {activeStore ? activeStore.name : "All branches"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="shrink-0 w-[220px]">
+                      <SortDropdown value={sortBy} options={sortOptions} onChange={setSortBy} />
+                    </div>
+                  </div>
+                  {activeFilterLabels.length > 0 && (
+                    <div className="px-5 py-3">
+                      <FilterChips items={activeFilterLabels} onClearAll={resetAllFilters} />
                     </div>
                   )}
-                  <button className={getButtonClassName({ variant: activeStore ? "secondary" : "primary" })} onClick={resetAllFilters}>
-                    Reset Filters
-                  </button>
                 </div>
-              }
-            />
-          )}
-        </section>
+
+                {/* ── Mobile toolbar ── */}
+                <div className="mb-4 lg:hidden">
+                  <div className="rounded-[2rem] border border-[rgba(30,58,138,0.08)] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                    <div className="text-[10px] font-extrabold uppercase tracking-[0.28em] text-[var(--vr-primary)]">Available products</div>
+                    <h2 className="mt-1 text-2xl font-black text-[var(--vr-text)]">{pageTitle}</h2>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-[var(--vr-primary)] px-3 py-1 text-xs font-bold text-white">
+                        {displayProducts.length} products
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-2 text-xs font-bold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)]"
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--vr-primary)]" />
+                        Filters {activeFilterLabels.length > 0 ? `(${activeFilterLabels.length})` : ""}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsSortDrawerOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-2 text-xs font-bold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)]"
+                      >
+                        Sort: {sortOptions.find((o) => o.value === sortBy)?.label ?? "Relevance"}
+                      </button>
+                    </div>
+                    {activeFilterLabels.length > 0 && (
+                      <div className="-mx-1 mt-3 overflow-x-auto pb-1">
+                        <FilterChips items={activeFilterLabels} onClearAll={resetAllFilters} compact className="px-1" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <section className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2 vr-scrollbar">
+                  {productsQuery.isFetching ? (
+                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <SkeletonLoader key={index} className="h-[420px] rounded-[2rem]" />
+                      ))}
+                    </div>
+                  ) : displayProducts.length ? (
+                    <StaggerGrid className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {displayProducts.map((product) => (
+                        <StaggerItem key={product.id}>
+                          <ProductCard product={product} />
+                        </StaggerItem>
+                      ))}
+                    </StaggerGrid>
+                  ) : (
+                    <EmptyState
+                      eyebrow="No Products Found"
+                      title={activeStore && filters.q.trim() ? `No "${filters.q.trim()}" matches at ${activeStore.name}` : "No products found"}
+                      description={
+                        activeStore && filters.q.trim()
+                          ? `Nothing matched at ${activeStore.name}. Search across all branches or pick a different branch.`
+                          : emptyResultsDescription
+                      }
+                      action={
+                        <div className="flex flex-wrap items-center justify-center gap-3">
+                          {activeStore ? (
+                            <button
+                              className={getButtonClassName({ variant: "primary" })}
+                              onClick={() => {
+                                const nextParams = new URLSearchParams(searchParams);
+                                nextParams.delete("storeId");
+                                setSearchParams(nextParams, { replace: true });
+                              }}
+                            >
+                              Search all branches
+                            </button>
+                          ) : (
+                            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--vr-muted)]">
+                              <Boxes className="h-4 w-4 text-[var(--vr-primary)]" />
+                              Try adjusting your filters
+                            </div>
+                          )}
+                          <button className={getButtonClassName({ variant: activeStore ? "secondary" : "primary" })} onClick={resetAllFilters}>
+                            Reset Filters
+                          </button>
+                        </div>
+                      }
+                    />
+                  )}
+                </section>
+
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+    </div>
+
+    {/* Full-width footer — outside the gray products container, spans entire viewport width */}
+    <SiteFooter
+      vrTechnologiesLogo={vrTechnologiesLogo}
+      quickCategories={categories}
+      footerSupportLinks={footerSupportLinks}
+      footerPolicyLinks={footerPolicyLinks}
+      primaryStore={activeStore ?? null}
+    />
 
       <FilterDrawer
         open={isFilterDrawerOpen}
-        title="Filters"
+        title=""
         onClose={() => setIsFilterDrawerOpen(false)}
+        eyebrow="Filters"
+        maxHeightClassName="h-[82vh]"
+        headerAction={
+          <button type="button" onClick={() => setMobileDraftFilters(initialCatalogFilters)} className="text-sm font-semibold text-[var(--vr-muted)]">
+            Clear All
+          </button>
+        }
         footer={
-          <div className="flex gap-3">
-            <Button variant="secondary" fullWidth onClick={() => setMobileDraftFilters(initialCatalogFilters)}>
-              Clear All
-            </Button>
-            <Button fullWidth onClick={applyMobileFilters}>
-              Apply
-            </Button>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-[1.15rem] bg-[var(--vr-surface-soft)] px-4 py-3">
+              <span className="text-sm font-semibold text-[var(--vr-text)]">{activeStore ? activeStore.name : "All stores"}</span>
+              <span className="text-sm font-black text-[var(--vr-primary)]">{mobilePreviewCount} items</span>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="secondary" fullWidth onClick={() => setMobileDraftFilters(initialCatalogFilters)}>
+                Clear All
+              </Button>
+              <Button fullWidth onClick={applyMobileFilters}>
+                Show Products
+              </Button>
+            </div>
           </div>
         }
       >
@@ -852,6 +952,9 @@ export function ProductsPage() {
           processors={processorOptions}
           ramOptions={ramOptions}
           storageOptions={storageOptions}
+          displayOptions={displayOptions}
+          osOptions={osOptions}
+          graphicsOptions={graphicsOptions}
           priceBounds={priceBounds}
           counts={mobileFilterCounts}
           state={mobileDraftFilters}
@@ -859,8 +962,44 @@ export function ProductsPage() {
           sticky={false}
           onClose={() => setIsFilterDrawerOpen(false)}
           onClear={() => setMobileDraftFilters(initialCatalogFilters)}
+          onApply={applyMobileFilters}
+          showCatalogSearch={false}
         />
       </FilterDrawer>
-    </div>
+
+      <FilterDrawer
+        open={isSortDrawerOpen}
+        title=""
+        onClose={() => setIsSortDrawerOpen(false)}
+        eyebrow="Sort by"
+        maxHeightClassName="max-h-[60vh]"
+        footer={<Button fullWidth onClick={applyMobileSort}>Apply</Button>}
+      >
+        <div className="space-y-1">
+          {sortOptions.map((option) => {
+            const selected = mobileDraftSortBy === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setMobileDraftSortBy(option.value)}
+                className={`flex w-full items-center gap-3 rounded-[1.1rem] px-1 py-4 text-left transition ${
+                  selected
+                    ? "text-[var(--vr-primary)]"
+                    : "text-[var(--vr-text)]"
+                }`}
+              >
+                <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-[var(--vr-primary)] bg-[var(--vr-primary)] text-white" : "border-slate-300 bg-white text-transparent"}`}>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-[15px] font-semibold ${selected ? "text-[var(--vr-primary)]" : "text-[var(--vr-text)]"}`}>{option.label}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </FilterDrawer>
+    </>
   );
 }
