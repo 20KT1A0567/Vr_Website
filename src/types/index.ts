@@ -148,6 +148,7 @@ export interface Product {
   sku?: string;
   serialNumber?: string;
   productCondition?: ProductCondition;
+  gstRatePercent?: number;
   price: number;
   originalPrice?: number;
   discountPercent?: number;
@@ -204,6 +205,10 @@ export interface PaymentTransaction {
   gatewayPaymentId?: string;
   gatewayStatus?: string;
   failureReason?: string;
+  refundId?: string;
+  refundedAmount?: number;
+  refundReason?: string;
+  refundStatus?: string;
   verifiedAt?: string;
   paidAt?: string;
   refundedAt?: string;
@@ -242,6 +247,11 @@ export interface Order {
   id: number;
   orderNumber: string;
   invoiceNumber: string;
+  subtotalAmount?: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  deliveryCharge?: number;
+  couponCode?: string;
   totalAmount: number;
   status: OrderStatus;
   deliveryType: DeliveryType;
@@ -252,6 +262,7 @@ export interface Order {
   contactPhone: string;
   contactEmail?: string;
   deliveryAddress?: string;
+  deliveryState?: string;
   notes?: string;
   cancellationReason?: string;
   returnReason?: string;
@@ -266,10 +277,146 @@ export interface Order {
   updatedAt: string;
 }
 
+export interface SiteSettings {
+  id?: number;
+  companyName: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  shippingNote?: string;
+  pickupEnabled: boolean;
+  deliveryEnabled: boolean;
+  standardDeliveryCharge?: number;
+  freeDeliveryThreshold?: number;
+  stateDeliveryCharges?: string;
+  stateDeliveryWindows?: string;
+  estimatedDeliveryDays?: number;
+  gstEnabled: boolean;
+  gstRate?: number;
+  gstNumber?: string;
+  companyPan?: string;
+  defaultHsnCode?: string;
+  companyAddress?: string;
+  companyPincode?: string;
+  invoicePrefix?: string;
+  invoiceNextSequence?: number;
+  invoicePadding?: number;
+  invoiceTerms?: string;
+  returnPolicy?: string;
+  defaultCity?: string;
+  defaultState?: string;
+  mapLink?: string;
+  includeDefaultHomeSections?: boolean;
+  defaultHomeSectionTypes?: string;
+  notificationEmailFrom?: string;
+  notificationReplyTo?: string;
+  whatsappNumber?: string;
+  orderNotificationsEnabled?: boolean;
+  paymentNotificationsEnabled?: boolean;
+  returnNotificationsEnabled?: boolean;
+  securityNotice?: string;
+}
+
+export interface CheckoutSavedAddress {
+  id: string;
+  label: string;
+  address: string;
+  contactName?: string;
+  contactPhone?: string;
+  defaultAddress?: boolean;
+}
+
+export interface CheckoutProfile {
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  defaultDeliveryAddress?: string;
+  savedAddresses: CheckoutSavedAddress[];
+}
+
+export interface UserAddress {
+  id: number;
+  label: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail?: string;
+  address: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  defaultAddress: boolean;
+}
+
+export interface UserProfile {
+  id: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  preferredContactName?: string;
+  preferredContactPhone?: string;
+  preferredContactEmail?: string;
+  addresses: UserAddress[];
+}
+
+export interface CouponValidation {
+  code: string;
+  valid: boolean;
+  message?: string;
+  subtotal: number;
+  discountAmount: number;
+  finalAmount: number;
+  minOrder?: number;
+  expiryDate?: string;
+  remainingUses?: number;
+}
+
+export interface RazorpaySettings {
+  enabled: boolean;
+  configured: boolean;
+  keyId?: string;
+  keySecretConfigured?: boolean;
+  webhookSecretConfigured?: boolean;
+  currency?: string;
+  merchantName?: string;
+  apiBaseUrl?: string;
+}
+
 export interface EnquiryPayload {
   name: string;
   phone: string;
   email?: string;
   productId?: number;
   message?: string;
+}
+
+export interface ProductReview {
+  id: number;
+  productId?: number;
+  productTitle?: string;
+  productImageUrl?: string;
+  userId?: number;
+  customerName: string;
+  customerEmail?: string;
+  rating: number;
+  title?: string;
+  comment: string;
+  status?: string;
+  featured?: boolean;
+  adminNote?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface BackInStockRequest {
+  id?: number;
+  productId: number;
+  email: string;
+  phone?: string;
+}
+
+export interface PriceDropAlert {
+  id?: number;
+  productId: number;
+  email: string;
+  phone?: string;
+  targetPrice?: number;
 }

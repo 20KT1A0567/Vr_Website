@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ShieldCheck, Truck, Undo2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -162,65 +162,83 @@ export function LoginPage() {
               </p>
             </div>
 
-            {step === "phone" ? (
-              <form className="mt-8 space-y-4" onSubmit={handleSendOtp}>
-                <label className="store-field flex items-center gap-2 !py-0 !pr-2 cursor-text">
-                  <span className="select-none font-semibold text-slate-700">+91</span>
-                  <input
-                    type="tel"
-                    className="flex-1 border-0 bg-transparent py-3 text-sm outline-none focus:ring-0"
-                    placeholder="10-digit mobile number"
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={phone}
-                    onChange={(event) => setPhone(event.target.value.replace(/\D/g, ""))}
-                    autoFocus
-                  />
-                </label>
-                <button className="store-primary-btn w-full py-4 text-base" disabled={loading}>
-                  {loading ? "Sending OTP..." : "Send OTP"}
-                </button>
-              </form>
-            ) : (
-              <form className="mt-8 space-y-4" onSubmit={handleVerifyOtp}>
-                <motion.div
-                  key={shakeKey}
-                  animate={shakeKey === 0 ? { x: 0 } : { x: [0, -10, 10, -8, 8, -4, 4, 0] }}
-                  transition={{ duration: 0.5 }}
+            <AnimatePresence mode="wait" initial={false}>
+              {step === "phone" ? (
+                <motion.form
+                  key="phone-step"
+                  initial={{ opacity: 0, x: -22 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -22 }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                  className="mt-8 space-y-4"
+                  onSubmit={handleSendOtp}
                 >
-                  <input
-                    className="store-field tracking-[0.4em] text-center text-lg"
-                    placeholder="6-digit OTP"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={otp}
-                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))}
-                    autoFocus
-                  />
-                </motion.div>
-                <div className="flex justify-between text-sm">
-                  <button
-                    type="button"
-                    className="font-semibold text-[#1e3a8a]"
-                    onClick={handleChangeNumber}
-                    disabled={loading}
-                  >
-                    Change number
+                  <label className="store-field flex items-center gap-2 !py-0 !pr-2 cursor-text">
+                    <span className="select-none font-semibold text-slate-700">+91</span>
+                    <input
+                      type="tel"
+                      className="flex-1 border-0 bg-transparent py-3 text-sm outline-none focus:ring-0"
+                      placeholder="10-digit mobile number"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value.replace(/\D/g, ""))}
+                      autoFocus
+                    />
+                  </label>
+                  <button className="store-primary-btn w-full py-4 text-base" disabled={loading}>
+                    {loading ? "Sending OTP..." : "Send OTP"}
                   </button>
-                  <button
-                    type="button"
-                    className="font-semibold text-[#1e3a8a]"
-                    onClick={handleResendOtp}
-                    disabled={loading}
+                </motion.form>
+              ) : (
+                <motion.form
+                  key="otp-step"
+                  initial={{ opacity: 0, x: 22 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 22 }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                  className="mt-8 space-y-4"
+                  onSubmit={handleVerifyOtp}
+                >
+                  <motion.div
+                    key={shakeKey}
+                    animate={shakeKey === 0 ? { x: 0 } : { x: [0, -10, 10, -8, 8, -4, 4, 0] }}
+                    transition={{ duration: 0.5 }}
                   >
-                    Resend OTP
+                    <input
+                      className="store-field tracking-[0.4em] text-center text-lg"
+                      placeholder="6-digit OTP"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))}
+                      autoFocus
+                    />
+                  </motion.div>
+                  <div className="flex justify-between text-sm">
+                    <button
+                      type="button"
+                      className="font-semibold text-[#1e3a8a]"
+                      onClick={handleChangeNumber}
+                      disabled={loading}
+                    >
+                      Change number
+                    </button>
+                    <button
+                      type="button"
+                      className="font-semibold text-[#1e3a8a]"
+                      onClick={handleResendOtp}
+                      disabled={loading}
+                    >
+                      Resend OTP
+                    </button>
+                  </div>
+                  <button className="store-primary-btn w-full py-4 text-base" disabled={loading}>
+                    {loading ? "Verifying..." : "Verify & Continue"}
                   </button>
-                </div>
-                <button className="store-primary-btn w-full py-4 text-base" disabled={loading}>
-                  {loading ? "Verifying..." : "Verify & Continue"}
-                </button>
-              </form>
-            )}
+                </motion.form>
+              )}
+            </AnimatePresence>
 
             <p className="mt-6 text-center text-xs text-slate-500">
               By continuing you agree to our terms of service and privacy policy.
@@ -238,8 +256,14 @@ export function LoginPage() {
               </div>
 
               <div className="mt-10 grid gap-4">
-                {loginHighlights.map((item) => (
-                  <div key={item.title} className="rounded-[1.2rem] border border-[rgba(30,58,138,0.08)] bg-white/80 p-4">
+                {loginHighlights.map((item, index) => (
+                  <motion.div
+                    key={item.title}
+                    initial={{ opacity: 0, x: 24 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.08 + index * 0.1, duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+                    className="rounded-[1.2rem] border border-[rgba(30,58,138,0.08)] bg-white/80 p-4"
+                  >
                     <div className="flex items-center gap-3">
                       <div className="rounded-xl bg-[#edf4ff] p-2.5 text-[#1e3a8a]">
                         <item.icon className="h-4 w-4" />
@@ -249,7 +273,7 @@ export function LoginPage() {
                         <div className="mt-1 text-sm text-slate-500">{item.subtitle}</div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>

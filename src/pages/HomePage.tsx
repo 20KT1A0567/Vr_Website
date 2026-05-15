@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, Laptop2, MapPin, ShieldCheck, Sparkles, Star, Store, Truck, Undo2 } from "lucide-react";
@@ -11,6 +12,14 @@ import { SectionHeader } from "components/ui/SectionHeader";
 import { SkeletonLoader } from "components/ui/SkeletonLoader";
 import { Badge } from "components/ui/Badge";
 import { BannerVideo } from "components/ui/BannerVideo";
+import {
+  RevealFadeUp,
+  RevealSlideLeft,
+  RevealSlideRight,
+  RevealStagger,
+  RevealStaggerItem,
+  RevealCardStack,
+} from "components/ui/RevealComponents";
 import { useSelectedStore } from "store/storeStore";
 import { catalogApi } from "api/client";
 import type { Category, HomeSection, Product } from "types";
@@ -239,6 +248,10 @@ export function HomePage() {
   const bannersQuery = useQuery({ queryKey: ["banners"], queryFn: () => catalogApi.getBanners() });
   const useCaseBannersQuery = useQuery({ queryKey: ["banners", "USE_CASE"], queryFn: () => catalogApi.getBanners("USE_CASE") });
   const homeSectionsQuery = useQuery({ queryKey: ["home-sections"], queryFn: catalogApi.getHomeSections });
+  const featuredProductsQuery = useQuery({ queryKey: ["home-featured-products"], queryFn: () => catalogApi.getFeaturedProducts(8) });
+  const todaysDealsQuery = useQuery({ queryKey: ["home-todays-deals"], queryFn: () => catalogApi.getTodaysDeals(8) });
+  const bestSellersQuery = useQuery({ queryKey: ["home-best-sellers"], queryFn: () => catalogApi.getBestSellers(8) });
+  const newArrivalsQuery = useQuery({ queryKey: ["home-new-arrivals"], queryFn: () => catalogApi.getNewArrivals(8) });
   const selectedStoreId = useSelectedStore((state) => state.selectedStoreId);
   const allProductsQuery = useQuery({
     queryKey: ["home-products", selectedStoreId],
@@ -249,12 +262,25 @@ export function HomePage() {
 
   const banners = bannersQuery.data ?? [];
   const homeSections = homeSectionsQuery.data ?? [];
+  const featuredProducts = featuredProductsQuery.data ?? [];
+  const todaysDeals = todaysDealsQuery.data ?? [];
+  const bestSellers = bestSellersQuery.data ?? [];
+  const newArrivals = newArrivalsQuery.data ?? [];
   const allProducts = allProductsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
   const stores = storesQuery.data ?? [];
 
   const firstError =
-    bannersQuery.error ?? homeSectionsQuery.error ?? allProductsQuery.error ?? categoriesQuery.error ?? storesQuery.error ?? null;
+    bannersQuery.error ??
+    homeSectionsQuery.error ??
+    featuredProductsQuery.error ??
+    todaysDealsQuery.error ??
+    bestSellersQuery.error ??
+    newArrivalsQuery.error ??
+    allProductsQuery.error ??
+    categoriesQuery.error ??
+    storesQuery.error ??
+    null;
   const hasCatalogError = Boolean(firstError);
 
   useEffect(() => {
@@ -330,10 +356,55 @@ export function HomePage() {
       return configuredSections;
     }
 
-      return spotlightProducts.length
+    const apiFallbackSections: HomeSection[] = [
+      {
+        id: -1,
+        title: "Today's Deals",
+        subtitle: "Time-sensitive deals pulled from the live backend pricing rules.",
+        sectionType: "TODAYS_DEALS" as const,
+        displayOrder: 0,
+        maxProducts: 8,
+        products: todaysDeals
+      },
+      {
+        id: -2,
+        title: "Handpicked picks worth spotlighting",
+        subtitle: "Featured products curated through the backend and admin panel.",
+        sectionType: "FEATURED_PRODUCTS" as const,
+        displayOrder: 1,
+        maxProducts: 8,
+        products: featuredProducts
+      },
+      {
+        id: -3,
+        title: "Our most-loved picks",
+        subtitle: "Best sellers coming directly from the website order history.",
+        sectionType: "BEST_SELLERS" as const,
+        displayOrder: 2,
+        maxProducts: 8,
+        products: bestSellers
+      },
+      {
+        id: -4,
+        title: "Fresh arrivals - just in",
+        subtitle: "Recently added products ready to go live on the storefront.",
+        sectionType: "NEW_ARRIVALS" as const,
+        displayOrder: 3,
+        maxProducts: 8,
+        products: newArrivals
+      }
+    ]
+      .filter((section) => section.products.length > 0)
+      .sort((left, right) => left.displayOrder - right.displayOrder);
+
+    if (apiFallbackSections.length > 0) {
+      return apiFallbackSections;
+    }
+
+    return spotlightProducts.length
       ? [
           {
-            id: -1,
+            id: -5,
             title: "Featured Products",
             subtitle: "Admin sections are empty right now, so we are showing the strongest live inventory instead.",
             sectionType: "FEATURED_PRODUCTS" as const,
@@ -343,7 +414,7 @@ export function HomePage() {
           }
         ]
       : [];
-  }, [homeSections, spotlightProducts]);
+  }, [bestSellers, featuredProducts, homeSections, newArrivals, spotlightProducts, todaysDeals]);
 
   const categoryCards = orderedCategories.slice(0, 4).map((category) => {
     const leadProduct = (productsByCategory.get(category.id) ?? [])[0];
@@ -387,7 +458,17 @@ export function HomePage() {
     { value: Number(averageStoreRating), suffix: "/5", decimals: 1, label: "store rating", description: "Real branch trust signals shown near products." }
   ];
 
-  if (bannersQuery.isLoading || homeSectionsQuery.isLoading || allProductsQuery.isLoading || categoriesQuery.isLoading || storesQuery.isLoading) {
+  if (
+    bannersQuery.isLoading ||
+    homeSectionsQuery.isLoading ||
+    featuredProductsQuery.isLoading ||
+    todaysDealsQuery.isLoading ||
+    bestSellersQuery.isLoading ||
+    newArrivalsQuery.isLoading ||
+    allProductsQuery.isLoading ||
+    categoriesQuery.isLoading ||
+    storesQuery.isLoading
+  ) {
     return <LoadingHomePage />;
   }
 
@@ -453,23 +534,45 @@ export function HomePage() {
                 <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.88)_34%,rgba(248,250,252,0.35)_68%,rgba(255,255,255,0.08)_100%)]" />
                 <div className="relative z-10 grid min-h-[430px] items-end gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-9">
                   <div className="max-w-[620px]">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <motion.div
+                      className="flex flex-wrap items-center gap-2"
+                      initial={{ opacity: 0, y: -14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    >
                       <Badge tone="accent" className="bg-[rgba(245,158,11,0.18)] text-[#b45309]">
                         {heroBanner?.mediaType === "VIDEO" ? "Video Campaign Live" : "Premium Refurbished Picks"}
                       </Badge>
                       {heroCategory ? <Badge tone="primary">{heroCategory.name}</Badge> : null}
-                    </div>
-                    <h1 className="display-font mt-5 text-[2.3rem] font-extrabold leading-[1.02] text-[var(--vr-dark)] sm:text-[2.8rem] lg:text-[3.55rem]">
+                    </motion.div>
+                    <motion.h1
+                      className="display-font mt-5 text-[2.3rem] font-extrabold leading-[1.02] text-[var(--vr-dark)] sm:text-[2.8rem] lg:text-[3.55rem]"
+                      initial={{ opacity: 0, y: 26 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.65, delay: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                    >
                       {heroTitle}
-                    </h1>
+                    </motion.h1>
                     {heroSubtitle ? (
-                      <p className="mt-4 max-w-[520px] text-base leading-8 text-[var(--vr-muted)] lg:text-lg">{heroSubtitle}</p>
+                      <motion.p
+                        className="mt-4 max-w-[520px] text-base leading-8 text-[var(--vr-muted)] lg:text-lg"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.5, delay: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                      >
+                        {heroSubtitle}
+                      </motion.p>
                     ) : null}
-                    <div className="mt-6 flex flex-wrap gap-3">
+                    <motion.div
+                      className="mt-6 flex flex-wrap gap-3"
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.48, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                    >
                       <span className={getButtonClassName({ variant: "primary", size: "lg" })}>
                         {heroCtaLabel}
                       </span>
-                    </div>
+                    </motion.div>
                   </div>
                 </div>
               </>
@@ -555,29 +658,35 @@ export function HomePage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <RevealStagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" stagger={0.09}>
         {categoryCards.map(({ category, previewImage }) => (
-          <Link key={category.id} to={getCategoryLink(category)}>
-            <Card className="vr-card-lift flex h-full items-center gap-4">
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#eff6ff,#fff7ed)]">
-                {previewImage ? (
-                  <img src={previewImage} alt={category.name} className="h-full w-full object-contain p-3" />
-                ) : (
-                  <span className="display-font text-lg font-bold uppercase text-[var(--vr-primary)]">{categoryPlaceholder(category)}</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Shop Category</div>
-                <h3 className="mt-2 text-xl font-extrabold text-[var(--vr-text)]">{category.name}</h3>
-                <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
-                  Browse Now
-                  <ArrowRight className="h-4 w-4" />
+          <RevealStaggerItem key={category.id}>
+            <Link to={getCategoryLink(category)}>
+              <Card className="vr-card-lift flex h-full items-center gap-4">
+                <motion.div
+                  className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#eff6ff,#fff7ed)]"
+                  whileHover={{ scale: 1.07, rotate: 2 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {previewImage ? (
+                    <img src={previewImage} alt={category.name} className="h-full w-full object-contain p-3" />
+                  ) : (
+                    <span className="display-font text-lg font-bold uppercase text-[var(--vr-primary)]">{categoryPlaceholder(category)}</span>
+                  )}
+                </motion.div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Shop Category</div>
+                  <h3 className="mt-2 text-xl font-extrabold text-[var(--vr-text)]">{category.name}</h3>
+                  <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
+                    Browse Now
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
                 </div>
-              </div>
-            </Card>
-          </Link>
+              </Card>
+            </Link>
+          </RevealStaggerItem>
         ))}
-      </section>
+      </RevealStagger>
 
       {homeProductSections.length > 0 ? (
         <div className="space-y-8">
@@ -591,28 +700,36 @@ export function HomePage() {
                 key={`${section.sectionType}-${section.id ?? section.title}`}
                 className="rounded-[1.9rem] border border-[var(--vr-border)] bg-white px-5 py-5 shadow-[0_18px_44px_rgba(15,23,42,0.06)] lg:px-6 lg:py-6"
               >
-                <SectionHeader
-                  eyebrow={eyebrow}
-                  title={section.title}
-                  description={section.subtitle}
-                  action={
-                    <div className="flex flex-wrap items-center gap-3">
-                      {isDealsSection && todayDealsCountdown ? <Badge tone="danger">Ends In {todayDealsCountdown}</Badge> : null}
-                      <Link
-                        to="/products"
-                        className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]"
-                      >
-                        View All <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </div>
-                  }
-                />
+                <RevealFadeUp>
+                  <SectionHeader
+                    eyebrow={eyebrow}
+                    title={section.title}
+                    description={section.subtitle}
+                    action={
+                      <div className="flex flex-wrap items-center gap-3">
+                        {isDealsSection && todayDealsCountdown ? <Badge tone="danger">Ends In {todayDealsCountdown}</Badge> : null}
+                        <Link
+                          to="/products"
+                          className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]"
+                        >
+                          View All <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </div>
+                    }
+                  />
+                </RevealFadeUp>
 
-                <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <RevealStagger
+                  className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  stagger={0.07}
+                  delay={0.05}
+                >
                   {visibleProducts.map((product) => (
-                    <ProductCard key={`${section.sectionType}-${product.id}`} product={product} />
+                    <RevealStaggerItem key={`${section.sectionType}-${product.id}`}>
+                      <ProductCard product={product} />
+                    </RevealStaggerItem>
                   ))}
-                </div>
+                </RevealStagger>
               </section>
             );
           })}
@@ -674,7 +791,7 @@ export function HomePage() {
           title="Find the right machine for you"
         />
         {useCaseBannersQuery.data && useCaseBannersQuery.data.length > 0 ? (
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <RevealStagger className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4" stagger={0.09}>
             {useCaseBannersQuery.data.map((banner) => {
               const target = resolveBannerLink(banner.linkUrl, "/products");
               const targetIsExternal = target.startsWith("http");
@@ -713,11 +830,12 @@ export function HomePage() {
                 </Link>
               );
             })}
-          </div>
+          </RevealStagger>
         ) : (
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <RevealStagger className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4" stagger={0.09}>
             {useCasePresets.map((item) => (
-              <Link key={item.title} to={item.link}>
+              <RevealStaggerItem key={item.title}>
+              <Link to={item.link}>
                 <Card className="vr-card-lift h-full">
                   <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-3 text-[var(--vr-primary)] w-fit">
                     <item.icon className="h-5 w-5" />
@@ -730,8 +848,9 @@ export function HomePage() {
                   </div>
                 </Card>
               </Link>
+              </RevealStaggerItem>
             ))}
-          </div>
+          </RevealStagger>
         )}
       </section>
 
@@ -742,8 +861,9 @@ export function HomePage() {
           action={<Link to="/stores" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">View All Stores <ArrowRight className="h-4 w-4" /></Link>}
         />
         <div className="mt-5 grid gap-4 xl:grid-cols-3">
-          {nearbyStores.map((store) => (
-            <Card key={store.id} className="overflow-hidden p-0">
+          {nearbyStores.map((store, storeIdx) => (
+            <RevealCardStack key={store.id} index={storeIdx}>
+              <Card className="overflow-hidden p-0">
               <div className="overflow-hidden border-b border-[var(--vr-border)] bg-[linear-gradient(135deg,#eef4ff,#fff7ed)]">
                 {store.imageUrl ? (
                   <img src={store.imageUrl} alt={store.name} className="h-48 w-full object-cover" />
@@ -788,42 +908,47 @@ export function HomePage() {
                 </div>
               </div>
             </Card>
+            </RevealCardStack>
           ))}
         </div>
       </section>
 
       <section className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <RevealStagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" stagger={0.08}>
           {homeTrustStats.map((item) => (
-            <div key={item.label} className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
-              <div className="display-font text-3xl font-extrabold text-[var(--vr-primary)]">
-                <CountUpStat value={item.value} suffix={item.suffix} decimals={item.decimals ?? 0} />
+            <RevealStaggerItem key={item.label}>
+              <div className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+                <div className="display-font text-3xl font-extrabold text-[var(--vr-primary)]">
+                  <CountUpStat value={item.value} suffix={item.suffix} decimals={item.decimals ?? 0} />
+                </div>
+                <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--vr-text)]">{item.label}</div>
+                <p className="mt-2 text-xs leading-6 text-[var(--vr-muted)]">{item.description}</p>
               </div>
-              <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--vr-text)]">{item.label}</div>
-              <p className="mt-2 text-xs leading-6 text-[var(--vr-muted)]">{item.description}</p>
-            </div>
+            </RevealStaggerItem>
           ))}
-        </div>
+        </RevealStagger>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <RevealStagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" stagger={0.07} delay={0.05}>
           {trustBar.map((item) => (
-            <div key={item.title} className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.05)]">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-2.5 text-[var(--vr-primary)]">
-                  <item.icon className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-[var(--vr-text)]">{item.title}</div>
-                  <div className="mt-1 text-xs text-[var(--vr-muted)]">{item.subtitle}</div>
+            <RevealStaggerItem key={item.title}>
+              <div className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.05)]">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-2.5 text-[var(--vr-primary)]">
+                    <item.icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--vr-text)]">{item.title}</div>
+                    <div className="mt-1 text-xs text-[var(--vr-muted)]">{item.subtitle}</div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </RevealStaggerItem>
           ))}
-        </section>
+        </RevealStagger>
 
         <section className="overflow-hidden rounded-[1.9rem] border border-[rgba(30,58,138,0.14)] bg-[linear-gradient(135deg,#0f172a,#1e3a8a)] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.16)] lg:p-7">
           <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr] xl:items-center">
-            <div>
+            <RevealSlideLeft>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#fde68a]">
                 Publish-ready shopping
               </div>
@@ -833,19 +958,21 @@ export function HomePage() {
               <p className="mt-3 max-w-xl text-sm leading-7 text-white/72 lg:text-base">
                 Buyers get a clearer reason to trust refurbished products: service, stores, pricing, and product condition stay connected from homepage to detail page.
               </p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
+            </RevealSlideLeft>
+            <RevealStagger className="grid gap-3 md:grid-cols-3" stagger={0.1} delay={0.15}>
               {buyerAssurance.map((item) => (
-                <div key={item.title} className="rounded-[1.35rem] border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/12 text-[#fde68a]">
-                    <item.icon className="h-5 w-5" />
+                <RevealStaggerItem key={item.title}>
+                  <div className="rounded-[1.35rem] border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/12 text-[#fde68a]">
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-[#fde68a]">{item.stat}</div>
+                    <h3 className="mt-2 text-base font-bold text-white">{item.title}</h3>
+                    <p className="mt-2 text-xs leading-6 text-white/66">{item.description}</p>
                   </div>
-                  <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-[#fde68a]">{item.stat}</div>
-                  <h3 className="mt-2 text-base font-bold text-white">{item.title}</h3>
-                  <p className="mt-2 text-xs leading-6 text-white/66">{item.description}</p>
-                </div>
+                </RevealStaggerItem>
               ))}
-            </div>
+            </RevealStagger>
           </div>
         </section>
       </section>

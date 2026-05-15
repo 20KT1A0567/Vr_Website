@@ -1,4 +1,4 @@
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, LazyMotion, domAnimation } from "framer-motion";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ScrollToTop } from "components/ScrollToTop";
 import { SiteLayout } from "components/layouts/SiteLayout";
@@ -20,11 +20,12 @@ import { ProductDetailPage } from "pages/ProductDetailPage";
 import { ProductsPage } from "pages/ProductsPage";
 import { StoresPage } from "pages/StoresPage";
 import { WishlistPage } from "pages/WishlistPage";
+import { AccountPage } from "pages/AccountPage";
 
 export default function App() {
   const location = useLocation();
   return (
-    <>
+    <LazyMotion features={domAnimation} strict>
       <ScrollToTop />
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/payment/success" element={<MotionPage><PaymentSuccessPage /></MotionPage>} />
             <Route path="/payment/failure" element={<MotionPage><PaymentFailurePage /></MotionPage>} />
             <Route path="/wishlist" element={<MotionPage><WishlistPage /></MotionPage>} />
+            <Route path="/account" element={<MotionPage><AccountPage /></MotionPage>} />
             <Route path="/stores" element={<MotionPage><StoresPage /></MotionPage>} />
             <Route path="/contact" element={<MotionPage><ContactPage /></MotionPage>} />
             <Route path="/help-me-choose" element={<MotionPage><HelpMeChoosePage /></MotionPage>} />
@@ -50,6 +52,6 @@ export default function App() {
           </Route>
         </Routes>
       </AnimatePresence>
-    </>
+    </LazyMotion>
   );
 }

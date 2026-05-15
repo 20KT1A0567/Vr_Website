@@ -1,3 +1,5 @@
+import { AnimatePresence, motion } from "framer-motion";
+
 interface FilterCheckboxProps {
   label: string;
   checked: boolean;
@@ -22,17 +24,41 @@ export function FilterCheckbox({ label, checked, count, disabled = false, onChan
           : "text-[var(--vr-text)] hover:bg-[var(--vr-surface-soft)]"
       }`}
     >
-      <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-[1.5px] transition ${
-        checked
-          ? "border-[var(--vr-primary)] bg-[var(--vr-primary)]"
-          : "border-slate-300 bg-white group-hover:border-[var(--vr-primary)]"
-      }`}>
-        {checked && (
-          <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </div>
+      <motion.div
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-[1.5px] transition ${
+          checked
+            ? "border-[var(--vr-primary)] bg-[var(--vr-primary)]"
+            : "border-slate-300 bg-white group-hover:border-[var(--vr-primary)]"
+        }`}
+        animate={checked ? { scale: [1, 0.82, 1.1, 1] } : { scale: 1 }}
+        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <AnimatePresence>
+          {checked && (
+            <motion.svg
+              className="h-2.5 w-2.5 text-white"
+              viewBox="0 0 12 12"
+              fill="none"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.1 }}
+            >
+              <motion.path
+                d="M2 6l3 3 5-5"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                exit={{ pathLength: 0 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              />
+            </motion.svg>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       {(logoUrl || iconUrl) ? (
         <div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[var(--vr-border)] bg-white">

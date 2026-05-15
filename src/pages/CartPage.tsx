@@ -18,8 +18,7 @@ import { getApiErrorMessage } from "../utils/api";
 import { formatCartItemCount, formatCartProductCount, formatCartUnitCount, getCartItemCount, getCartQuantityCount } from "../utils/cartCounts";
 import { showCartToast } from "../utils/cartNotifications";
 import { formatCurrency, getProductPrimaryImage, getProductSavings } from "../utils/catalog";
-
-const GST_RATE = 0.18;
+import { calculateTaxAmount, getGstRatePercent } from "../utils/orderPricing";
 
 interface DisplayCartItem {
   id: string | number;
@@ -40,6 +39,7 @@ export function CartPage() {
   const updateGuestCartQuantity = useCartStore((state) => state.updateGuestCartQuantity);
   const removeGuestCartItem = useCartStore((state) => state.removeGuestCartItem);
   const { data: cart = [] } = useQuery({ queryKey: ["cart"], queryFn: customerApi.getCart, enabled: Boolean(user) });
+  const { data: siteSettings } = useQuery({ queryKey: ["site-settings"], queryFn: catalogApi.getSiteSettings });
   const displayCart: DisplayCartItem[] = user
     ? cart.map((item) => ({ id: item.id, productId: item.product.id, quantity: item.quantity, product: item.product }))
     : guestCart.map((item) => ({ id: `guest-${item.product.id}`, productId: item.product.id, quantity: item.quantity, product: item.product }));
@@ -53,7 +53,8 @@ export function CartPage() {
   const totalItems = getCartQuantityCount(displayCart);
   const totalSavings = displayCart.reduce((sum, item) => sum + getProductSavings(item.product) * item.quantity, 0);
   const totalMrp = subtotal + totalSavings;
-  const gstAmount = Math.round(subtotal * GST_RATE);
+  const gstRatePercent = getGstRatePercent(siteSettings);
+  const gstAmount = calculateTaxAmount(siteSettings, subtotal);
   const total = subtotal + gstAmount;
   const cartItemCount = getCartItemCount(displayCart);
   const productCountLabel = formatCartProductCount(cartItemCount);
@@ -138,7 +139,10 @@ export function CartPage() {
             <div className="mt-3 text-3xl font-extrabold text-[var(--vr-text)]">
               <AnimatedNumber value={total} format={(n) => formatCurrency(n)} />
             </div>
-            <div className="mt-1 text-xs text-[var(--vr-muted)]">Subtotal {formatCurrency(subtotal)} + GST {formatCurrency(gstAmount)}</div>
+            <div className="mt-1 text-xs text-[var(--vr-muted)]">
+              Subtotal {formatCurrency(subtotal)}
+              {gstRatePercent > 0 ? ` + GST ${formatCurrency(gstAmount)}` : ""}
+            </div>
           </Card>
           <Card variant="subtle">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">You saved</div>
@@ -241,9 +245,10 @@ export function CartPage() {
 
                       <div className="mt-5 flex flex-wrap items-center gap-3">
                         <div className="inline-flex items-center overflow-hidden rounded-2xl border border-[var(--vr-border)] bg-white shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                          <button
+                          <motion.button
                             type="button"
                             aria-label={`Decrease quantity for ${item.product.title}`}
+                            whileTap={{ scale: 0.82 }}
                             className="flex h-11 w-12 items-center justify-center text-slate-600 transition hover:bg-[var(--vr-surface-soft)] hover:text-[var(--vr-primary)]"
                             onClick={() => {
                               if (user) {
@@ -254,14 +259,15 @@ export function CartPage() {
                             }}
                           >
                             <Minus className="h-4 w-4" />
-                          </button>
+                          </motion.button>
                           <div className="flex h-11 min-w-[3.4rem] items-center justify-center border-x border-[var(--vr-border)] bg-[var(--vr-surface-soft)] text-base font-extrabold text-[var(--vr-text)]">
                             {item.quantity}
                           </div>
-                          <button
+                          <motion.button
                             type="button"
                             aria-label={`Increase quantity for ${item.product.title}`}
                             disabled={getStockLimit(item) > 0 && item.quantity >= getStockLimit(item)}
+                            whileTap={{ scale: 0.82 }}
                             className="flex h-11 w-12 items-center justify-center text-slate-600 transition hover:bg-[var(--vr-surface-soft)] hover:text-[var(--vr-primary)] disabled:cursor-not-allowed disabled:opacity-35"
                             onClick={() => {
                               if (user) {
@@ -272,7 +278,7 @@ export function CartPage() {
                             }}
                           >
                             <Plus className="h-4 w-4" />
-                          </button>
+                          </motion.button>
                         </div>
                         <span className="text-xs font-semibold text-[var(--vr-muted)]">
                           {formatCurrency(item.product.price)} each
@@ -318,7 +324,12 @@ export function CartPage() {
           </AnimatePresence>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-[13rem] lg:h-fit">
+        <motion.aside
+          initial={{ opacity: 0, x: 32 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.44, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+          className="space-y-4 lg:sticky lg:top-[13rem] lg:h-fit"
+        >
           <Card className="overflow-hidden p-0">
             <div className="bg-[linear-gradient(135deg,#1e3a8a,#233f9d)] p-5 text-white">
             <div className="flex items-center gap-3">
@@ -350,7 +361,7 @@ export function CartPage() {
                 <span>{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>GST (18%)</span>
+                <span>{gstRatePercent > 0 ? `GST (${gstRatePercent}%)` : "Tax"}</span>
                 <span>{formatCurrency(gstAmount)}</span>
               </div>
               <div className="flex items-center justify-between">
@@ -378,15 +389,17 @@ export function CartPage() {
               </div>
             </div>
 
-            <Link
-              to={user ? "/checkout" : "/login"}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-[var(--vr-primary)] px-5 py-4 text-base font-bold text-white shadow-[0_14px_30px_rgba(30,58,138,0.22)] transition hover:bg-[var(--vr-primary-strong)]"
-            >
-              {user ? "Continue to Checkout" : "Sign in to Checkout"}
-            </Link>
+            <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="mt-6">
+              <Link
+                to={user ? "/checkout" : "/login"}
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-[var(--vr-primary)] px-5 py-4 text-base font-bold text-white shadow-[0_14px_30px_rgba(30,58,138,0.22)] transition hover:bg-[var(--vr-primary-strong)] hover:shadow-[0_18px_40px_rgba(30,58,138,0.34)]"
+              >
+                {user ? "Continue to Checkout" : "Sign in to Checkout"}
+              </Link>
+            </motion.div>
             </div>
           </Card>
-        </aside>
+        </motion.aside>
       </div>
 
       <StickyMobileBar>

@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { customerApi } from "api/client";
 
 export interface ProductReview {
   id: string;
@@ -31,12 +32,23 @@ function saveAllReviews(reviews: ProductReview[]) {
 export function useReviews(productId: number) {
   const [allReviews, setAllReviews] = useState<ProductReview[]>(loadAllReviews);
 
-  const reviews = allReviews.filter((r) => r.productId === productId);
+  const reviews = useMemo(
+    () => allReviews.filter((r) => r.productId === productId),
+    [allReviews, productId]
+  );
 
-  const averageRating = reviews.length ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : null;
+  const averageRating = reviews.length
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+    : null;
 
   const addReview = useCallback(
-    (draft: { rating: number; title: string; body: string; authorName: string; verifiedPurchase?: boolean }) => {
+    (draft: {
+      rating: number;
+      title: string;
+      body: string;
+      authorName: string;
+      verifiedPurchase?: boolean;
+    }) => {
       const newReview: ProductReview = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         productId,
@@ -52,6 +64,15 @@ export function useReviews(productId: number) {
         saveAllReviews(next);
         return next;
       });
+      customerApi
+        .submitReview({
+          productId,
+          customerName: draft.authorName,
+          rating: draft.rating,
+          title: draft.title,
+          comment: draft.body
+        })
+        .catch(() => {});
       return newReview;
     },
     [productId]

@@ -2,17 +2,27 @@ import axios, { type InternalAxiosRequestConfig } from "axios";
 import type {
   ApiEnvelope,
   AuthUser,
+  BackInStockRequest,
   Banner,
   Brand,
   CartItem,
   Category,
+  CheckoutProfile,
+  CouponValidation,
   EnquiryPayload,
   HomeSection,
   Order,
+  OrderTimelineEvent,
   PaymentCheckoutSession,
   PaymentMethod,
+  PriceDropAlert,
   Product,
-  Store
+  ProductReview,
+  RazorpaySettings,
+  SiteSettings,
+  Store,
+  UserAddress,
+  UserProfile
 } from "types";
 import { useAuthStore } from "store/authStore";
 
@@ -143,8 +153,11 @@ export const catalogApi = {
   getHomeSections: () => unwrap<HomeSection[]>(api.get("/public/home-sections")),
   getBestSellers: (limit = 8) => unwrap<Product[]>(api.get("/public/products/best-sellers", { params: { limit } })),
   getTodaysDeals: (limit = 8) => unwrap<Product[]>(api.get("/public/products/todays-deals", { params: { limit } })),
+  getFeaturedProducts: (limit = 8) => unwrap<Product[]>(api.get("/public/products/featured", { params: { limit } })),
+  getNewArrivals: (limit = 8) => unwrap<Product[]>(api.get("/public/products/new-arrivals", { params: { limit } })),
   getStores: () => unwrap<Store[]>(api.get("/stores")),
-  getFeaturedProducts: () => unwrap<Product[]>(api.get("/products/featured")),
+  getSiteSettings: () => unwrap<SiteSettings>(api.get("/settings/public")),
+  getRazorpaySettings: () => unwrap<RazorpaySettings>(api.get("/public/payments/razorpay")),
   getProducts: (params?: CatalogProductQueryParams) => unwrap<Product[]>(api.get("/products", { params })),
   getProduct: (id: string | number) => unwrap<Product>(api.get(`/products/${id}`)),
   createEnquiry: (payload: EnquiryPayload) => unwrap(api.post("/enquiries", payload))
@@ -159,8 +172,36 @@ export const customerApi = {
   getWishlist: () => unwrap<Product[]>(api.get("/users/wishlist")),
   addToWishlist: (productId: number) => unwrap<Product[]>(api.post(`/users/wishlist/${productId}`)),
   removeFromWishlist: (productId: number) => unwrap<Product[]>(api.delete(`/users/wishlist/${productId}`)),
+  getProfile: () => unwrap<UserProfile>(api.get("/users/profile")),
+  getCheckoutProfile: () => unwrap<CheckoutProfile>(api.get("/users/checkout-profile")),
+  createAddress: (payload: {
+    label: string;
+    contactName: string;
+    contactPhone: string;
+    contactEmail?: string;
+    address: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    defaultAddress?: boolean;
+  }) => unwrap<UserAddress>(api.post("/users/addresses", payload)),
+  updateAddress: (id: number, payload: {
+    label: string;
+    contactName: string;
+    contactPhone: string;
+    contactEmail?: string;
+    address: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    defaultAddress?: boolean;
+  }) => unwrap<UserAddress>(api.put(`/users/addresses/${id}`, payload)),
+  deleteAddress: (id: number) => unwrap(api.delete(`/users/addresses/${id}`)),
   getOrders: () => unwrap<Order[]>(api.get("/users/orders")),
   getOrder: (id: number) => unwrap<Order>(api.get(`/users/orders/${id}`)),
+  getOrderTimeline: (id: number) => unwrap<OrderTimelineEvent[]>(api.get(`/users/orders/${id}/timeline`)),
+  trackPublicOrder: (orderNumber: string, phone: string) => unwrap<Order>(api.get("/public/orders/track", { params: { orderNumber, phone } })),
+  validateCoupon: (code: string, subtotal: number) => unwrap<CouponValidation>(api.post("/coupons/validate", { code, subtotal })),
   createPaymentOrder: (id: number) => unwrap<PaymentCheckoutSession>(api.post(`/users/orders/${id}/payment-order`)),
   verifyPayment: (id: number, payload: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) =>
     unwrap<Order>(api.post(`/users/orders/${id}/verify-payment`, payload)),
@@ -178,6 +219,45 @@ export const customerApi = {
     contactPhone: string;
     contactEmail?: string;
     deliveryAddress?: string;
+    deliveryState?: string;
     notes?: string;
-  }) => unwrap<Order>(api.post("/orders/place", payload))
+    couponCode?: string;
+  }) => unwrap<Order>(api.post("/orders/place", payload)),
+  placeGuestOrder: (payload: {
+    deliveryType: "PICKUP" | "DELIVERY";
+    paymentMethod: PaymentMethod;
+    storeId: number;
+    contactName: string;
+    contactPhone: string;
+    contactEmail?: string;
+    deliveryAddress?: string;
+    deliveryState?: string;
+    notes?: string;
+    couponCode?: string;
+    items: Array<{ productId: number; quantity: number }>;
+  }) => unwrap<Order>(api.post("/orders/guest", payload)),
+  updateProfile: (payload: {
+    name: string;
+    email?: string;
+    phone?: string;
+    preferredContactName?: string;
+    preferredContactPhone?: string;
+    preferredContactEmail?: string;
+  }) => unwrap<UserProfile>(api.put("/users/profile", payload)),
+  recordRecentView: (productId: number, anonymousId?: string) =>
+    unwrap<null>(api.post("/products/recently-viewed", { productId, anonymousId })),
+  getRecentlyViewed: (anonymousId?: string) =>
+    unwrap<Product[]>(api.get("/products/recently-viewed", { params: anonymousId ? { anonymousId } : undefined })),
+  registerBackInStock: (productId: number, email: string, phone?: string) =>
+    unwrap<BackInStockRequest>(api.post("/products/back-in-stock", { productId, email, phone })),
+  createPriceDropAlert: (productId: number, email: string, targetPrice?: number, phone?: string) =>
+    unwrap<PriceDropAlert>(api.post("/products/price-drop-alerts", { productId, email, targetPrice, phone })),
+  submitReview: (payload: {
+    productId: number;
+    customerName: string;
+    customerEmail?: string;
+    rating: number;
+    title?: string;
+    comment: string;
+  }) => unwrap<ProductReview>(api.post("/users/reviews", payload))
 };

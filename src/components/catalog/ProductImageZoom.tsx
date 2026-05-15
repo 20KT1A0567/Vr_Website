@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { MouseEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Maximize2 } from "lucide-react";
 
 interface ProductImageZoomProps {
@@ -129,38 +130,51 @@ export function ProductImageZoom({ imageUrl, alt }: ProductImageZoomProps) {
         </div>
 
         {/* Amazon-style Lens (XL only) */}
-        {isZoomActive && containerSize.width > 0 && renderedImage.width >= lensWidth && (
-          <div
-            className="pointer-events-none absolute z-20 hidden xl:block shadow-[0_0_0_9999px_rgba(255,255,255,0.4)] border border-[rgba(0,0,0,0.1)] bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2rV7928GBgYQwgcsAAgwAA9GA+H9xU/xAAAAAElFTkSuQmCC')]"
-            style={{
-              width: lensWidth,
-              height: lensHeight,
-              left: lensPosition.x,
-              top: lensPosition.y,
-              cursor: "crosshair"
-            }}
-          />
-        )}
+        <AnimatePresence>
+          {isZoomActive && containerSize.width > 0 && renderedImage.width >= lensWidth && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="pointer-events-none absolute z-20 hidden xl:block shadow-[0_0_0_9999px_rgba(255,255,255,0.4)] border border-[rgba(0,0,0,0.1)] bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2rV7928GBgYQwgcsAAgwAA9GA+H9xU/xAAAAAElFTkSuQmCC')]"
+              style={{
+                width: lensWidth,
+                height: lensHeight,
+                left: lensPosition.x,
+                top: lensPosition.y,
+                cursor: "crosshair"
+              }}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Side-by-Side HD Preview Box (XL only) */}
-      {isZoomActive && containerSize.width > 0 && renderedImage.width >= lensWidth && (
-        <div
-          className="pointer-events-none absolute left-[calc(100%+1.5rem)] top-0 z-[60] hidden h-full w-[95%] overflow-hidden rounded-[1rem] border border-[rgba(0,0,0,0.1)] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.12)] xl:block"
-        >
-          <img
-            src={imageUrl}
-            className="absolute max-w-none bg-white"
-            style={{
-              width: renderedImage.width * ZOOM_LEVEL,
-              height: renderedImage.height * ZOOM_LEVEL,
-              left: -(lensPosition.x - renderedImage.x) * ZOOM_LEVEL,
-              top: -(lensPosition.y - renderedImage.y) * ZOOM_LEVEL,
-              objectFit: "contain"
-            }}
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {isZoomActive && containerSize.width > 0 && renderedImage.width >= lensWidth && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none absolute left-[calc(100%+1.5rem)] top-0 z-[60] hidden h-full w-[95%] overflow-hidden rounded-[1rem] border border-[rgba(0,0,0,0.1)] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.12)] xl:block"
+            style={{ transformOrigin: "left center" }}
+          >
+            <img
+              src={imageUrl}
+              className="absolute max-w-none bg-white"
+              style={{
+                width: renderedImage.width * ZOOM_LEVEL,
+                height: renderedImage.height * ZOOM_LEVEL,
+                left: -(lensPosition.x - renderedImage.x) * ZOOM_LEVEL,
+                top: -(lensPosition.y - renderedImage.y) * ZOOM_LEVEL,
+                objectFit: "contain"
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

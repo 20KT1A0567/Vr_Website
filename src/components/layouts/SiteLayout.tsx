@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { authApi, catalogApi, customerApi } from "api/client";
 import { Button, getButtonClassName } from "components/ui/Button";
@@ -183,6 +183,7 @@ function buildEntityCountMap(products: Product[], key: "brandId" | "categoryId")
 }
 
 export function SiteLayout() {
+  const reduce = useReducedMotion();
   const location = useLocation();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
@@ -582,7 +583,12 @@ export function SiteLayout() {
           scrolled ? "shadow-sm" : ""
         }`}
       >
-        <div className="bg-[var(--vr-primary)] text-white shadow-sm overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0, y: -28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+          className="bg-[var(--vr-primary)] text-white shadow-sm overflow-hidden"
+        >
           <div className="vr-marquee">
             <div className="vr-marquee-track">
               <div className="vr-marquee-content px-4">
@@ -609,19 +615,25 @@ export function SiteLayout() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         <div className={`mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 transition-all duration-300 ${scrolled ? "py-1" : "py-2"}`}>
           <div className="flex items-center gap-4">
 
-            <Link to="/" className="flex shrink-0 items-center gap-2">
-              <div className="overflow-hidden rounded-lg border border-[var(--vr-border)] bg-white shadow-sm">
-                <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-7 w-7 object-cover sm:h-8 sm:w-8" />
-              </div>
-              <div className="min-w-0">
-                <div className="display-font truncate text-xs font-black uppercase tracking-tight text-[var(--vr-primary)] sm:text-sm">VR Technologies</div>
-              </div>
-            </Link>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.88 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.1, duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <Link to="/" className="flex shrink-0 items-center gap-2">
+                <div className="overflow-hidden rounded-lg border border-[var(--vr-border)] bg-white shadow-sm">
+                  <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-7 w-7 object-cover sm:h-8 sm:w-8" />
+                </div>
+                <div className="min-w-0">
+                  <div className="display-font truncate text-xs font-black uppercase tracking-tight text-[var(--vr-primary)] sm:text-sm">VR Technologies</div>
+                </div>
+              </Link>
+            </motion.div>
 
             <div className="hidden flex-1 lg:block">
               <div ref={searchContainerRef} className="flex items-center gap-3">
@@ -658,13 +670,26 @@ export function SiteLayout() {
                       Search
                     </button>
                   </div>
-                  {isSearchFocused && debouncedHeaderSearch.trim().length >= 2 ? (
-                    <div className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-full overflow-hidden rounded-[1.4rem] border border-[var(--vr-border)] bg-white shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
+                  <AnimatePresence>
+                    {isSearchFocused && debouncedHeaderSearch.trim().length >= 2 && (
+                    <motion.div
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      style={{ transformOrigin: "top" }}
+                      className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-full overflow-hidden rounded-[1.4rem] border border-[var(--vr-border)] bg-white shadow-[0_24px_55px_rgba(15,23,42,0.14)]"
+                    >
                       {searchSuggestions.length > 0 ? (
                         <>
-                          {searchSuggestions.map((product) => (
-                            <Link
+                          {searchSuggestions.map((product, index) => (
+                            <motion.div
                               key={product.id}
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.04, duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                            >
+                            <Link
                               to={`/products/${product.id}`}
                               onClick={() => { setIsSearchFocused(false); setHeaderSearch(""); }}
                               className="flex items-center gap-3 px-4 py-3 transition hover:bg-[var(--vr-surface-soft)]"
@@ -682,6 +707,7 @@ export function SiteLayout() {
                                 {formatCurrency(product.price)}
                               </div>
                             </Link>
+                            </motion.div>
                           ))}
                           <div className="border-t border-[var(--vr-border)] px-4 py-2">
                             <button
@@ -721,8 +747,9 @@ export function SiteLayout() {
                           )}
                         </div>
                       )}
-                    </div>
-                  ) : null}
+                    </motion.div>
+                    )}
+                  </AnimatePresence>
                 </form>
                 <div ref={storeMenuRef} className="relative shrink-0">
                   <button
@@ -751,9 +778,15 @@ export function SiteLayout() {
                     <ChevronDown className={`ml-0.5 h-3.5 w-3.5 shrink-0 text-[var(--vr-muted)] transition ${isStoreMenuOpen ? "rotate-180" : ""}`} />
                   </button>
 
-                  {isStoreMenuOpen ? (
-                    <div
+                  <AnimatePresence>
+                    {isStoreMenuOpen && (
+                    <motion.div
                       role="listbox"
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: -8 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: -8 }}
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      style={{ transformOrigin: "top right" }}
                       className="absolute right-0 top-full z-50 mt-2 w-[320px] overflow-hidden rounded-[1.25rem] border border-[var(--vr-border)] bg-white shadow-[0_20px_54px_rgba(15,23,42,0.18)]"
                     >
                       <div className="bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_100%)] px-3.5 py-3 text-white">
@@ -879,8 +912,9 @@ export function SiteLayout() {
                           View all stores
                         </Link>
                       </div>
-                    </div>
-                  ) : null}
+                    </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             </div>
@@ -941,8 +975,16 @@ export function SiteLayout() {
                     <ChevronDown className={`h-3.5 w-3.5 text-[var(--vr-muted)] transition ${isAccountMenuOpen ? "rotate-180" : ""}`} />
                   </button>
 
-                  {isAccountMenuOpen ? (
-                    <div className="absolute right-0 top-[calc(100%+0.9rem)] z-50 w-[320px] overflow-hidden rounded-[1.8rem] border border-[var(--vr-border)] bg-white shadow-[0_28px_65px_rgba(15,23,42,0.16)]">
+                  <AnimatePresence>
+                    {isAccountMenuOpen && (
+                    <motion.div
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: -10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: -10 }}
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      style={{ transformOrigin: "top right" }}
+                      className="absolute right-0 top-[calc(100%+0.9rem)] z-50 w-[320px] overflow-hidden rounded-[1.8rem] border border-[var(--vr-border)] bg-white shadow-[0_28px_65px_rgba(15,23,42,0.16)]"
+                    >
                       <div className="border-b border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-5 py-4">
                         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Profile</div>
                         <div className="mt-1 text-base font-bold text-[var(--vr-text)]">{user.name}</div>
@@ -980,6 +1022,21 @@ export function SiteLayout() {
                           <ChevronDown className="-rotate-90 h-4 w-4 text-slate-300" />
                         </Link>
 
+                        <Link
+                          to="/account"
+                          onClick={() => setIsAccountMenuOpen(false)}
+                          className="flex items-center justify-between rounded-[1.3rem] border border-[var(--vr-border)] bg-white px-4 py-3 transition hover:border-[var(--vr-primary)] hover:bg-[var(--vr-surface-soft)]"
+                        >
+                          <div className="flex items-center gap-3">
+                            <User className="h-4 w-4 text-[var(--vr-primary)]" />
+                            <div>
+                              <div className="text-sm font-semibold text-[var(--vr-text)]">My Account</div>
+                              <div className="text-xs text-[var(--vr-muted)]">Edit profile and manage addresses</div>
+                            </div>
+                          </div>
+                          <ChevronDown className="-rotate-90 h-4 w-4 text-slate-300" />
+                        </Link>
+
                         {user.role !== "USER" ? (
                           <a
                             href="/admin-panel"
@@ -1002,8 +1059,9 @@ export function SiteLayout() {
                           Logout
                         </Button>
                       </div>
-                    </div>
-                  ) : null}
+                    </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               ) : (
                 <NavLink
@@ -1070,7 +1128,12 @@ export function SiteLayout() {
             </form>
           </div>
 
-          <div className="mt-2 hidden items-center justify-between gap-6 lg:flex">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22, duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-2 hidden items-center justify-between gap-6 lg:flex"
+          >
             <nav ref={discoveryMenuRef} className="vr-nav-shell flex flex-wrap items-center gap-1.5 px-2.5 py-1.5">
               <NavLink
                 to="/"
@@ -1377,7 +1440,7 @@ export function SiteLayout() {
               })}
             </nav>
 
-          </div>
+          </motion.div>
         </div>
       </header>
 
@@ -1423,10 +1486,23 @@ export function SiteLayout() {
         </div>
       ) : null}
 
-      {isMobileMenuOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduce ? 0.15 : 0.22 }}
+          className="fixed inset-0 z-50 lg:hidden"
+        >
           <button type="button" aria-label="Close menu" className="absolute inset-0 bg-slate-950/50" onClick={() => setIsMobileMenuOpen(false)} />
-          <aside className="absolute right-0 top-0 flex h-full w-[88%] max-w-[380px] flex-col overflow-hidden bg-white shadow-[-20px_0_60px_rgba(15,23,42,0.2)]">
+          <motion.aside
+            initial={reduce ? { opacity: 0 } : { x: "100%", opacity: 0.7 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={reduce ? { opacity: 0 } : { x: "100%", opacity: 0.7 }}
+            transition={reduce ? { duration: 0.16 } : { duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute right-0 top-0 flex h-full w-[88%] max-w-[380px] flex-col overflow-hidden bg-white shadow-[-20px_0_60px_rgba(15,23,42,0.2)]"
+          >
 
             {/* ── Sticky header ── */}
             <div className="flex shrink-0 items-center justify-between border-b border-[var(--vr-border)] bg-white px-4 py-3">
@@ -1623,9 +1699,10 @@ export function SiteLayout() {
               ) : null}
 
             </div>
-          </aside>
-        </div>
-      ) : null}
+          </motion.aside>
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className={`vr-mobile-safe flex-1 lg:pb-0 ${selectedStoreName ? "lg:pt-[11.6rem]" : "lg:pt-[9.4rem]"} ${isProductsPage ? "" : "pb-10"}`}>
         <Outlet />
@@ -1642,17 +1719,30 @@ export function SiteLayout() {
       )}
 
       {primaryStore?.whatsapp ? (
-        <a
+        <motion.a
           href={`https://wa.me/${primaryStore.whatsapp.replace(/\D/g, "")}`}
           target="_blank"
           rel="noreferrer"
           aria-label="Chat on WhatsApp"
-          className="vr-mobile-floating-whatsapp fixed bottom-3 right-3 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#25D366] shadow-[0_10px_24px_rgba(37,211,102,0.32)] transition hover:scale-105 sm:right-4 lg:bottom-5 lg:right-5 lg:h-12 lg:w-12"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 1.2, type: "spring", stiffness: 480, damping: 18 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.92 }}
+          className="vr-mobile-floating-whatsapp fixed bottom-3 right-3 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#25D366] shadow-[0_10px_24px_rgba(37,211,102,0.32)] sm:right-4 lg:bottom-5 lg:right-5 lg:h-12 lg:w-12"
         >
+          {/* Pulse ring */}
+          {!reduce && (
+            <motion.span
+              className="absolute inset-0 rounded-full bg-[#25D366]"
+              animate={{ scale: [1, 1.5, 1.5], opacity: [0.5, 0, 0] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut", delay: 2 }}
+            />
+          )}
           <svg viewBox="0 0 24 24" className="h-6 w-6 fill-white" xmlns="http://www.w3.org/2000/svg">
             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
           </svg>
-        </a>
+        </motion.a>
       ) : null}
 
       <CompareBar />

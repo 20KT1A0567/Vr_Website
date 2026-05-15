@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
 import {
@@ -370,7 +371,12 @@ export function ProductDetailPage() {
       </div>
 
       <div className="xl:flex xl:gap-6 xl:items-start">
-        <section className="min-w-0 flex-1 space-y-6">
+        <motion.section
+          initial={{ opacity: 0, x: -32 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.44, ease: [0.22, 1, 0.36, 1] }}
+          className="min-w-0 flex-1 space-y-6"
+        >
           <Card className="p-4 sm:p-5">
             {showVideo && product.videoUrl ? (
               <div className="relative aspect-square overflow-hidden rounded-[1.4rem] bg-black sm:aspect-[4/3]">
@@ -401,8 +407,11 @@ export function ProductDetailPage() {
 
             <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-5">
               {images.map((image, index) => (
-                <button
+                <motion.button
                   key={image.id}
+                  initial={{ opacity: 0, scale: 0.88 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.18 + index * 0.06, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                   type="button"
                   onMouseEnter={() => {
                     setShowVideo(false);
@@ -421,7 +430,7 @@ export function ProductDetailPage() {
                   ) : (
                     <div className="h-full w-full rounded-[0.8rem] bg-white" />
                   )}
-                </button>
+                </motion.button>
               ))}
               {product.videoUrl ? (
                 <button
@@ -654,12 +663,16 @@ export function ProductDetailPage() {
                   <div key={section.title}>
                     <h3 className="mb-5 text-xl font-bold text-[var(--vr-text)]">{section.title}</h3>
                     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                      {section.fields.map((field) => {
+                      {section.fields.map((field, fieldIndex) => {
                         const meta = getSpecMeta(field.label);
                         const SpecIcon = meta.Icon;
                         return (
-                          <div
+                          <motion.div
                             key={`${section.title}-${field.label}`}
+                            initial={{ opacity: 0, y: 18, scale: 0.96 }}
+                            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                            viewport={{ once: true, margin: "-40px" }}
+                            transition={{ delay: fieldIndex * 0.05, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                             className="rounded-2xl border border-[var(--vr-border)] bg-white p-6 shadow-sm transition hover:border-[var(--vr-primary)] hover:shadow-md"
                           >
                             <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${meta.bg}`}>
@@ -671,7 +684,7 @@ export function ProductDetailPage() {
                             <p className="mt-1 text-base font-bold text-[var(--vr-text)]">
                               {field.value}
                             </p>
-                          </div>
+                          </motion.div>
                         );
                       })}
                     </div>
@@ -863,9 +876,14 @@ export function ProductDetailPage() {
               </div>
             ) : null}
           </Card>
-        </section>
+        </motion.section>
 
-        <aside className="xl:sticky xl:top-[13rem] xl:h-fit xl:w-[44%] xl:shrink-0">
+        <motion.aside
+          initial={{ opacity: 0, x: 32 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.44, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+          className="xl:sticky xl:top-[13rem] xl:h-fit xl:w-[44%] xl:shrink-0"
+        >
           <Card className="p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip label={product.brandName ?? "VR Certified"} tone="muted" />
@@ -891,11 +909,16 @@ export function ProductDetailPage() {
               <span>{viewerCount} people viewing now</span>
             </div>
 
-            <div className="mt-5 flex flex-wrap items-end gap-3">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.18, duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-5 flex flex-wrap items-end gap-3"
+            >
               <div className="text-4xl font-extrabold text-[var(--vr-text)]">{formatCurrency(product.price)}</div>
               {product.originalPrice ? <div className="pb-1 text-lg text-slate-400 line-through">{formatCurrency(product.originalPrice)}</div> : null}
               {product.discountPercent ? <StatusChip label={`${product.discountPercent}% Off`} tone="accent" /> : null}
-            </div>
+            </motion.div>
 
             <div className="mt-5 rounded-[1.3rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4">
               <div className={`text-sm font-semibold ${lowStock ? "text-[var(--vr-danger)]" : "text-[var(--vr-success)]"}`}>{getProductStockLabel(product)}</div>
@@ -1119,7 +1142,7 @@ export function ProductDetailPage() {
               </a>
             </div>
           </Card>
-        </aside>
+        </motion.aside>
       </div>
 
       <Card>

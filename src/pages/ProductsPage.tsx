@@ -1,4 +1,6 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { Boxes, CheckCircle2, Grid3X3, SlidersHorizontal } from "lucide-react";
@@ -592,6 +594,7 @@ export function ProductsPage() {
 
   const activeCategory = categories.find((category) => filters.categoryIds.includes(category.id));
   const activeBrand = brands.find((brand) => filters.brandIds.includes(brand.id));
+  const desktopStickyTop = "calc(var(--sticky-offset, 9.5rem) + 2.75rem)";
 
   const alternativeCategoriesForBrand = useMemo(
     () =>
@@ -733,11 +736,14 @@ export function ProductsPage() {
 
   return (
     <>
-    <div className="bg-[#eef3fb] pb-[88px] lg:pb-0">
-      <div className="px-4 pt-5 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[1600px]">
+    <div
+      className="bg-white pb-[88px] lg:pb-0"
+      style={{ "--page-h": "calc(100vh - var(--sticky-offset, 9.5rem))" } as CSSProperties}
+    >
+      <div className="px-4 pt-4 sm:px-6 lg:flex lg:h-[var(--page-h)] lg:flex-col lg:overflow-hidden lg:px-8">
+        <div className="mx-auto w-full max-w-[1600px] lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
           {activeStore ? (
-            <div className="mb-5 rounded-[1.6rem] border border-[rgba(30,58,138,0.12)] bg-[rgba(30,58,138,0.05)] px-5 py-4 shadow-[0_12px_30px_rgba(30,58,138,0.06)]">
+            <div className="mb-4 shrink-0 rounded-[1.6rem] border border-[rgba(30,58,138,0.12)] bg-[rgba(30,58,138,0.05)] px-5 py-4 shadow-[0_12px_30px_rgba(30,58,138,0.06)]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--vr-primary)]">Branch view</div>
@@ -761,10 +767,18 @@ export function ProductsPage() {
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-6 lg:flex-row">
+          <div
+            className="flex flex-col gap-3 lg:min-h-0 lg:flex-1 lg:flex-row"
+            style={{ "--products-sticky-top": desktopStickyTop } as CSSProperties}
+          >
             {/* Sidebar column: this div is the flex item and stretches to the full products height,
                 giving the sticky aside inside it the correct bounds throughout the entire product list */}
-            <div className="hidden lg:block lg:h-full lg:w-[280px] lg:shrink-0">
+            <motion.div
+              initial={{ opacity: 0, x: -28 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="vr-scrollbar hidden lg:flex lg:w-[280px] lg:shrink-0 lg:flex-col lg:overflow-y-auto"
+            >
               <FilterSidebar
                 brands={brands}
                 categories={categories}
@@ -780,43 +794,39 @@ export function ProductsPage() {
                 setState={setFilters}
                 onClear={resetAllFilters}
                 sticky={false}
-                className="lg:h-full"
+                className=""
               />
-            </div>
+            </motion.div>
 
-            <div className="min-w-0 flex-1 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
-              <div ref={gridTopRef} className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-                {/* ── Desktop toolbar — sticky at same level as sidebar ── */}
-                <div className="mb-4 hidden overflow-hidden rounded-2xl border border-[rgba(30,58,138,0.08)] bg-white shadow-[0_8px_28px_rgba(15,23,42,0.06)] lg:sticky lg:top-0 lg:z-20 lg:block">
-                  <div className="flex items-center justify-between gap-4 border-b border-[var(--vr-border)] px-5 py-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <div className="text-[10px] font-extrabold uppercase tracking-[0.28em] text-[var(--vr-primary)]">Available products</div>
-                          <h2 className="mt-0.5 text-xl font-extrabold text-[var(--vr-text)]">{pageTitle}</h2>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center rounded-full bg-[var(--vr-primary)] px-3 py-1 text-[11px] font-bold text-white">
-                            {displayProducts.length}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-3 py-1 text-[11px] font-semibold text-[var(--vr-muted)]">
-                            <Grid3X3 className="h-3 w-3 text-[var(--vr-primary)]" />
-                            {activeStore ? activeStore.name : "All branches"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="shrink-0 w-[220px]">
-                      <SortDropdown value={sortBy} options={sortOptions} onChange={setSortBy} />
-                    </div>
+            <div className="min-w-0 flex-1 lg:flex lg:min-h-0 lg:flex-col">
+              {/* ── Desktop toolbar — outside scroll container so dropdown is never clipped ── */}
+              <div className="mb-3 hidden shrink-0 overflow-visible rounded-2xl border border-[var(--vr-border)] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.05)] lg:block">
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <h2 className="truncate text-[15px] font-extrabold text-[var(--vr-text)]">{pageTitle}</h2>
+                    <span className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-[var(--vr-primary)] px-1.5 text-[10px] font-black text-white">
+                      {displayProducts.length}
+                    </span>
+                    {activeStore && (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--vr-muted)]">
+                        <Grid3X3 className="h-3 w-3 text-[var(--vr-primary)]" />
+                        {activeStore.name}
+                      </span>
+                    )}
                   </div>
-                  {activeFilterLabels.length > 0 && (
-                    <div className="px-5 py-3">
-                      <FilterChips items={activeFilterLabels} onClearAll={resetAllFilters} />
-                    </div>
-                  )}
+                  <div className="w-[220px] shrink-0">
+                    <SortDropdown value={sortBy} options={sortOptions} onChange={setSortBy} />
+                  </div>
                 </div>
+                {activeFilterLabels.length > 0 && (
+                  <div className="border-t border-[var(--vr-border)] px-4 py-2.5">
+                    <FilterChips items={activeFilterLabels} onClearAll={resetAllFilters} />
+                  </div>
+                )}
+              </div>
 
+              {/* ── Products scroll area ── */}
+              <div ref={gridTopRef} className="vr-scrollbar min-h-0 flex-1 lg:overflow-y-auto lg:overscroll-contain">
                 {/* ── Mobile toolbar ── */}
                 <div className="mb-4 lg:hidden">
                   <div className="rounded-[2rem] border border-[rgba(30,58,138,0.08)] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -850,7 +860,7 @@ export function ProductsPage() {
                   </div>
                 </div>
 
-                <section className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2 vr-scrollbar">
+                <section className="lg:pr-2">
                   {productsQuery.isFetching ? (
                     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                       {Array.from({ length: 6 }).map((_, index) => (
@@ -858,14 +868,29 @@ export function ProductsPage() {
                       ))}
                     </div>
                   ) : displayProducts.length ? (
-                    <StaggerGrid className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {displayProducts.map((product) => (
-                        <StaggerItem key={product.id}>
-                          <ProductCard product={product} />
-                        </StaggerItem>
-                      ))}
-                    </StaggerGrid>
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={JSON.stringify(queryParams) + sortBy}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.22 }}
+                      >
+                        <StaggerGrid className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                          {displayProducts.map((product) => (
+                            <StaggerItem key={product.id}>
+                              <ProductCard product={product} />
+                            </StaggerItem>
+                          ))}
+                        </StaggerGrid>
+                      </motion.div>
+                    </AnimatePresence>
                   ) : (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+                    >
                     <EmptyState
                       eyebrow="No Products Found"
                       title={activeStore && filters.q.trim() ? `No "${filters.q.trim()}" matches at ${activeStore.name}` : "No products found"}
@@ -899,6 +924,7 @@ export function ProductsPage() {
                         </div>
                       }
                     />
+                    </motion.div>
                   )}
                 </section>
 
@@ -979,9 +1005,10 @@ export function ProductsPage() {
           {sortOptions.map((option) => {
             const selected = mobileDraftSortBy === option.value;
             return (
-              <button
+              <motion.button
                 key={option.value}
                 type="button"
+                whileTap={{ scale: 0.97 }}
                 onClick={() => setMobileDraftSortBy(option.value)}
                 className={`flex w-full items-center gap-3 rounded-[1.1rem] px-1 py-4 text-left transition ${
                   selected
@@ -989,13 +1016,17 @@ export function ProductsPage() {
                     : "text-[var(--vr-text)]"
                 }`}
               >
-                <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-[var(--vr-primary)] bg-[var(--vr-primary)] text-white" : "border-slate-300 bg-white text-transparent"}`}>
+                <motion.div
+                  animate={selected ? { scale: [0.7, 1.18, 1], backgroundColor: "var(--vr-primary)" } : { scale: 1, backgroundColor: "#fff" }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-[var(--vr-primary)] text-white" : "border-slate-300 text-transparent"}`}
+                >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                </div>
+                </motion.div>
                 <div className="min-w-0 flex-1">
                   <div className={`text-[15px] font-semibold ${selected ? "text-[var(--vr-primary)]" : "text-[var(--vr-text)]"}`}>{option.label}</div>
                 </div>
-              </button>
+              </motion.button>
             );
           })}
         </div>

@@ -277,6 +277,30 @@ export function OrderDetailPage() {
           <Card>
             <SectionHeader eyebrow="Summary" title="Order snapshot" />
             <div className="mt-5 space-y-3 text-sm text-[var(--vr-muted)]">
+              {typeof order.subtotalAmount === "number" ? (
+                <div className="flex items-center justify-between">
+                  <span>Subtotal</span>
+                  <span className="font-semibold text-[var(--vr-text)]">{formatCurrency(order.subtotalAmount)}</span>
+                </div>
+              ) : null}
+              {typeof order.discountAmount === "number" && order.discountAmount > 0 ? (
+                <div className="flex items-center justify-between">
+                  <span>Discount{order.couponCode ? ` (${order.couponCode})` : ""}</span>
+                  <span className="font-semibold text-emerald-600">-{formatCurrency(order.discountAmount)}</span>
+                </div>
+              ) : null}
+              {typeof order.taxAmount === "number" ? (
+                <div className="flex items-center justify-between">
+                  <span>GST / Tax</span>
+                  <span className="font-semibold text-[var(--vr-text)]">{formatCurrency(order.taxAmount)}</span>
+                </div>
+              ) : null}
+              {typeof order.deliveryCharge === "number" ? (
+                <div className="flex items-center justify-between">
+                  <span>Delivery</span>
+                  <span className="font-semibold text-[var(--vr-text)]">{formatCurrency(order.deliveryCharge)}</span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between">
                 <span>Invoice</span>
                 <span className="font-semibold text-[var(--vr-text)]">{order.invoiceNumber}</span>
