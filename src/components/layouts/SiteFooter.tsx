@@ -1,16 +1,20 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { CreditCard, MapPin, ShieldCheck, Truck, Undo2 } from "lucide-react";
-import type { Category, Store } from "types";
+import type { Category, NavigationItem, SiteSettings, Store } from "types";
 import { getCategoryLink } from "../../utils/catalog";
 import { EASE, VIEWPORT } from "../../animations/variants";
 
 interface SiteFooterProps {
   vrTechnologiesLogo: string;
   quickCategories: Category[];
-  footerSupportLinks: readonly { label: string; to: string }[];
-  footerPolicyLinks: readonly { label: string; to: string }[];
+  footerLinks: NavigationItem[];
   primaryStore: Store | null;
+  siteSettings?: SiteSettings;
+}
+
+function isExternalUrl(url: string) {
+  return /^https?:\/\//i.test(url);
 }
 
 const trustItems = [
@@ -23,10 +27,28 @@ const trustItems = [
 export function SiteFooter({
   vrTechnologiesLogo,
   quickCategories,
-  footerSupportLinks,
-  footerPolicyLinks,
+  footerLinks,
   primaryStore,
+  siteSettings,
 }: SiteFooterProps) {
+  const midpoint = Math.ceil(footerLinks.length / 2);
+  const footerSupportLinks = footerLinks.slice(0, midpoint);
+  const footerPolicyLinks = footerLinks.slice(midpoint);
+  const companyName = siteSettings?.companyName || "VR Technologies";
+  const logoUrl = siteSettings?.logoUrl || vrTechnologiesLogo;
+  const tagline = siteSettings?.tagline || "Refurbished - Warranted - Trusted";
+  const footerDescription = siteSettings?.footerDescription || "Certified refurbished laptops and desktops with warranty, quality checks, and store-backed support across Hyderabad.";
+  const address = siteSettings?.companyAddress || (primaryStore ? `${primaryStore.address}, ${primaryStore.city}` : "");
+  const supportPhone = siteSettings?.supportPhone || primaryStore?.phone || "";
+  const supportEmail = siteSettings?.supportEmail || "support@vrtechnologies.in";
+  const whatsappNumber = siteSettings?.whatsappNumber || primaryStore?.whatsapp || "";
+  const socialLinks = [
+    { label: "Facebook", url: siteSettings?.facebookUrl },
+    { label: "Instagram", url: siteSettings?.instagramUrl },
+    { label: "X", url: siteSettings?.xUrl },
+    { label: "LinkedIn", url: siteSettings?.linkedinUrl },
+    { label: "YouTube", url: siteSettings?.youtubeUrl }
+  ].filter((item): item is { label: string; url: string } => Boolean(item.url));
   return (
     <footer className="bg-[var(--vr-dark)] text-white">
       {/* ── Trust strip ── */}
@@ -88,15 +110,15 @@ export function SiteFooter({
                 whileHover={{ scale: 1.06, rotate: 1 }}
                 transition={{ duration: 0.22, ease: EASE }}
               >
-                <img src={vrTechnologiesLogo} alt="VR Technologies" className="h-12 w-12 object-cover" />
+                <img src={logoUrl} alt={companyName} className="h-12 w-12 object-cover" />
               </motion.div>
               <div>
-                <div className="display-font text-lg font-extrabold uppercase tracking-tight text-white">VR Technologies</div>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">Refurbished · Warranted · Trusted</div>
+                <div className="display-font text-lg font-extrabold uppercase tracking-tight text-white">{companyName}</div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">{tagline}</div>
               </div>
             </div>
             <p className="mt-4 max-w-xs text-[13px] leading-6 text-white/55">
-              Certified refurbished laptops and desktops with warranty, quality checks, and store-backed support across Hyderabad.
+              {footerDescription}
             </p>
           </motion.div>
 
@@ -160,9 +182,15 @@ export function SiteFooter({
                     show: { opacity: 1, x: 0, transition: { duration: 0.32, ease: EASE } },
                   }}
                 >
-                  <Link to={item.to} className="text-sm text-white/65 transition hover:text-white">
-                    {item.label}
-                  </Link>
+                  {isExternalUrl(item.url) ? (
+                    <a href={item.url} target="_blank" rel="noreferrer" className="text-sm text-white/65 transition hover:text-white">
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link to={item.url} className="text-sm text-white/65 transition hover:text-white">
+                      {item.label}
+                    </Link>
+                  )}
                 </motion.li>
               ))}
             </motion.ul>
@@ -194,9 +222,15 @@ export function SiteFooter({
                     show: { opacity: 1, x: 0, transition: { duration: 0.32, ease: EASE } },
                   }}
                 >
-                  <Link to={item.to} className="text-sm text-white/65 transition hover:text-white">
-                    {item.label}
-                  </Link>
+                  {isExternalUrl(item.url) ? (
+                    <a href={item.url} target="_blank" rel="noreferrer" className="text-sm text-white/65 transition hover:text-white">
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link to={item.url} className="text-sm text-white/65 transition hover:text-white">
+                      {item.label}
+                    </Link>
+                  )}
                 </motion.li>
               ))}
             </motion.ul>
@@ -211,6 +245,39 @@ export function SiteFooter({
           >
             <div className="mb-4 text-[10px] font-bold uppercase tracking-[0.28em] text-white/40">Contact</div>
             <ul className="space-y-3 text-[13px] text-white/65">
+              {address ? (
+                <li className="flex items-start gap-2">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/30" />
+                  <span>{address}</span>
+                </li>
+              ) : null}
+              {supportPhone ? (
+                <li className="flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 shrink-0 text-center text-[10px] text-white/30">P</span>
+                  <a href={`tel:${supportPhone}`} className="transition hover:text-white">{supportPhone}</a>
+                </li>
+              ) : null}
+              {whatsappNumber ? (
+                <li className="flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 shrink-0 text-center text-[10px] text-white/30">W</span>
+                  <a href={`https://wa.me/${whatsappNumber.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="transition hover:text-white">{whatsappNumber}</a>
+                </li>
+              ) : null}
+              <li className="flex items-center gap-2">
+                <span className="h-3.5 w-3.5 shrink-0 text-center text-[10px] text-white/30">@</span>
+                <a href={`mailto:${supportEmail}`} className="transition hover:text-white">{supportEmail}</a>
+              </li>
+            </ul>
+            {socialLinks.length ? (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {socialLinks.map((item) => (
+                  <a key={item.label} href={item.url} target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/60 transition hover:border-white/20 hover:text-white">
+                    {item.label}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            <ul className="hidden space-y-3 text-[13px] text-white/65">
               {primaryStore && (
                 <li className="flex items-start gap-2">
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/30" />
@@ -241,7 +308,7 @@ export function SiteFooter({
           viewport={{ once: true }}
           transition={{ duration: 0.5, delay: 0.3, ease: EASE }}
         >
-          <p className="text-xs text-white/40">© 2026 VR Technologies. All rights reserved.</p>
+          <p className="text-xs text-white/40">© 2026 {companyName}. All rights reserved.</p>
           <motion.div
             className="flex flex-wrap items-center justify-center gap-2"
             initial="hidden"

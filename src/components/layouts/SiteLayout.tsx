@@ -39,7 +39,9 @@ import { authApi, catalogApi, customerApi } from "api/client";
 import { Button, getButtonClassName } from "components/ui/Button";
 import { Badge } from "components/ui/Badge";
 import { CompareBar } from "components/catalog/CompareBar";
-import type { Brand, Category, Product, ProductCondition, Store } from "types";
+import { QuickViewModal } from "components/catalog/QuickViewModal";
+import { BackToTopButton } from "components/ui/BackToTopButton";
+import type { Brand, Category, NavigationItem, Product, ProductCondition, SiteSettings, Store } from "types";
 import { useAuthStore } from "store/authStore";
 import { useCartStore } from "store/cartStore";
 import { useSelectedStore } from "store/storeStore";
@@ -50,7 +52,7 @@ import { formatCurrency, getBrandLink, getBrandQueryValue, getCategoryLink, getC
 import { matchesCatalogFilters, type CatalogFilterState } from "../../utils/catalogFilters";
 import { SiteFooter } from "./SiteFooter";
 
-import { desktopLinks, footerPolicyLinks, footerSupportLinks, mobileBottomLinks, trustPoints, vrTechnologiesLogo } from "../../constants/siteConfig";
+import { trustPoints, vrTechnologiesLogo } from "../../constants/siteConfig";
 
 const preferredCategoryOrder = ["Laptops", "Desktops", "Accessories", "Monitors", "Gaming Laptops", "MacBooks", "Workstations"];
 const LOCATION_STORAGE_KEY = "vrtech-current-location";
@@ -182,6 +184,22 @@ function buildEntityCountMap(products: Product[], key: "brandId" | "categoryId")
   }, {});
 }
 
+function isExternalUrl(url: string) {
+  return /^https?:\/\//i.test(url);
+}
+
+function getNavigationIcon(item: Pick<NavigationItem, "label" | "url">): LucideIcon {
+  const normalized = `${item.label} ${item.url}`.toLowerCase();
+  if (item.url === "/" || normalized.includes("home")) return Home;
+  if (normalized.includes("product")) return ShoppingBag;
+  if (normalized.includes("contact")) return MessageSquare;
+  if (normalized.includes("order")) return Package;
+  if (normalized.includes("about")) return Building2;
+  if (normalized.includes("privacy") || normalized.includes("policy")) return ShieldCheck;
+  if (normalized.includes("store")) return StoreIcon;
+  return LayoutDashboard;
+}
+
 export function SiteLayout() {
   const reduce = useReducedMotion();
   const location = useLocation();
@@ -198,6 +216,8 @@ export function SiteLayout() {
   const { data: categories = [] } = useQuery({ queryKey: ["header-categories"], queryFn: catalogApi.getCategories });
   const { data: brands = [] } = useQuery({ queryKey: ["header-brands"], queryFn: catalogApi.getBrands });
   const { data: stores = [] } = useQuery({ queryKey: ["header-stores"], queryFn: catalogApi.getStores });
+  const { data: navigation } = useQuery({ queryKey: ["site-navigation"], queryFn: catalogApi.getNavigation });
+  const { data: siteSettings } = useQuery<SiteSettings>({ queryKey: ["site-settings"], queryFn: catalogApi.getSiteSettings });
 
   const [headerSearch, setHeaderSearch] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -303,6 +323,19 @@ export function SiteLayout() {
     };
   }, [isMobileMenuOpen, isStoreSelectorOpen]);
 
+  useEffect(() => {
+    if (!siteSettings?.faviconUrl) {
+      return;
+    }
+    let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (!favicon) {
+      favicon = document.createElement("link");
+      favicon.rel = "icon";
+      document.head.appendChild(favicon);
+    }
+    favicon.href = siteSettings.faviconUrl;
+  }, [siteSettings?.faviconUrl]);
+
   const cartCount = getCartItemCount(user ? cart : guestCart);
   const cartCountLabel = cartCount ? formatCartItemCount(cartCount) : "View Cart";
   const orderedCategories = useMemo(() => sortCategories(categories), [categories]);
@@ -328,6 +361,11 @@ export function SiteLayout() {
     [activeStoreId, stores]
   );
   const activeHeaderStores = useMemo(() => stores.filter((store) => store.active), [stores]);
+  const headerLinks = navigation?.headerMenu ?? [];
+  const footerLinks = navigation?.footerMenu ?? [];
+  const mobileLinks = navigation?.mobileMenu ?? [];
+  const brandLogoUrl = siteSettings?.logoUrl || vrTechnologiesLogo;
+  const brandName = siteSettings?.companyName || "VR Technologies";
   const { data: discoveryProducts = [] } = useQuery({
     queryKey: ["header-discovery-products", activeStoreId ?? null],
     queryFn: () => catalogApi.getProducts(activeStoreId ? { storeId: activeStoreId } : undefined)
@@ -627,10 +665,10 @@ export function SiteLayout() {
             >
               <Link to="/" className="flex shrink-0 items-center gap-2">
                 <div className="overflow-hidden rounded-lg border border-[var(--vr-border)] bg-white shadow-sm">
-                  <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-7 w-7 object-cover sm:h-8 sm:w-8" />
+                  <img src={brandLogoUrl} alt={`${brandName} logo`} className="h-7 w-7 object-cover sm:h-8 sm:w-8" />
                 </div>
                 <div className="min-w-0">
-                  <div className="display-font truncate text-xs font-black uppercase tracking-tight text-[var(--vr-primary)] sm:text-sm">VR Technologies</div>
+                  <div className="display-font truncate text-xs font-black uppercase tracking-tight text-[var(--vr-primary)] sm:text-sm">{brandName}</div>
                 </div>
               </Link>
             </motion.div>
@@ -1244,12 +1282,27 @@ export function SiteLayout() {
                           <span>Browse all products</span>
                           <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
                         </Link>
-                        {desktopLinks.map((item) => {
-                          const Icon = item.icon;
+                        {headerLinks.map((item) => {
+                          const Icon = getNavigationIcon(item);
+                          if (isExternalUrl(item.url)) {
+                            return (
+                              <a
+                                key={`${item.label}-${item.url}`}
+                                href={item.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => setActiveDiscoveryMenu(null)}
+                                className="inline-flex items-center gap-2 rounded-[0.9rem] px-3 py-2 text-xs font-semibold text-[var(--vr-text)] transition hover:bg-[var(--vr-surface-soft)]"
+                              >
+                                <Icon className="h-3.5 w-3.5 text-[var(--vr-primary)]" />
+                                {item.label}
+                              </a>
+                            );
+                          }
                           return (
                             <Link
-                              key={item.label}
-                              to={item.to}
+                              key={`${item.label}-${item.url}`}
+                              to={item.url}
                               onClick={() => setActiveDiscoveryMenu(null)}
                               className="inline-flex items-center gap-2 rounded-[0.9rem] px-3 py-2 text-xs font-semibold text-[var(--vr-text)] transition hover:bg-[var(--vr-surface-soft)]"
                             >
@@ -1421,23 +1474,19 @@ export function SiteLayout() {
                 ) : null}
               </div>
 
-              {desktopLinks.map((item) => {
-                const Icon = item.icon;
-                return (
-                <NavLink
-                  key={item.label}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold transition ${
-                      isActive ? "bg-[rgba(30,58,138,0.08)] text-[var(--vr-primary)]" : "text-[var(--vr-muted)] hover:bg-[var(--vr-surface-soft)] hover:text-[var(--vr-text)]"
-                    }`
-                  }
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {item.label}
-                </NavLink>
-              );
-              })}
+              <NavLink
+                to="/help-me-choose"
+                className={({ isActive }) =>
+                  `inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    isActive
+                      ? "border-amber-300 bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-[0_14px_30px_rgba(245,158,11,0.28)]"
+                      : "border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-900 hover:border-amber-300 hover:shadow-[0_12px_28px_rgba(245,158,11,0.16)]"
+                  }`
+                }
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Help Me Choose</span>
+              </NavLink>
             </nav>
 
           </motion.div>
@@ -1507,7 +1556,7 @@ export function SiteLayout() {
             {/* ── Sticky header ── */}
             <div className="flex shrink-0 items-center justify-between border-b border-[var(--vr-border)] bg-white px-4 py-3">
               <div>
-                <div className="text-[9px] font-extrabold uppercase tracking-[0.32em] text-[var(--vr-primary)]">VR Technologies</div>
+                <div className="text-[9px] font-extrabold uppercase tracking-[0.32em] text-[var(--vr-primary)]">{brandName}</div>
                 <div className="text-[15px] font-extrabold leading-tight text-[var(--vr-text)]">Browse Menu</div>
               </div>
               <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--vr-border)] text-[var(--vr-muted)] transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-text)]" onClick={() => setIsMobileMenuOpen(false)}>
@@ -1556,30 +1605,45 @@ export function SiteLayout() {
 
               {/* Main nav links */}
               <div className="mt-4 space-y-1.5">
-                {[
-                  { label: "Home", to: "/", icon: Home, active: location.pathname === "/" },
-                  { label: "All Products", to: "/products", icon: Laptop2, active: location.pathname === "/products" },
-                  { label: "All Orders", to: user ? "/orders" : "/login", icon: Package, active: location.pathname === "/orders" },
-                  { label: "Stores", to: "/stores", icon: StoreIcon, active: location.pathname === "/stores" },
-                  { label: "Contact", to: "/contact", icon: MessageSquare, active: location.pathname === "/contact" },
-                ].map((item) => {
-                  const Icon = item.icon;
+                {mobileLinks.map((item) => {
+                  const target = item.url === "/orders" && !user ? "/login" : item.url;
+                  const Icon = getNavigationIcon(item);
+                  const active = !isExternalUrl(target) && (target === "/" ? location.pathname === "/" : location.pathname.startsWith(target));
+
+                  if (isExternalUrl(target)) {
+                    return (
+                      <a
+                        key={`${item.label}-${target}`}
+                        href={target}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between rounded-2xl border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-3 text-[14px] font-semibold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:bg-white"
+                      >
+                        <span className="flex items-center gap-3">
+                          <Icon className="h-4 w-4 text-[var(--vr-primary)]" />
+                          {item.label}
+                        </span>
+                        <ChevronDown className="h-4 w-4 -rotate-90 text-slate-300" />
+                      </a>
+                    );
+                  }
+
                   return (
                     <Link
-                      key={item.label}
-                      to={item.to}
+                      key={`${item.label}-${target}`}
+                      to={target}
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-[14px] font-semibold transition ${
-                        item.active
+                        active
                           ? "border-[rgba(30,58,138,0.2)] bg-[linear-gradient(135deg,#1e3a8a,#2563eb)] text-white shadow-[0_8px_20px_rgba(30,58,138,0.2)]"
                           : "border-[var(--vr-border)] bg-[var(--vr-surface-soft)] text-[var(--vr-text)] hover:border-[var(--vr-primary)] hover:bg-white"
                       }`}
                     >
                       <span className="flex items-center gap-3">
-                        <Icon className={`h-4 w-4 ${item.active ? "text-white" : "text-[var(--vr-primary)]"}`} />
+                        <Icon className={`h-4 w-4 ${active ? "text-white" : "text-[var(--vr-primary)]"}`} />
                         {item.label}
                       </span>
-                      <ChevronDown className={`h-4 w-4 -rotate-90 ${item.active ? "text-white/70" : "text-slate-300"}`} />
+                      <ChevronDown className={`h-4 w-4 -rotate-90 ${active ? "text-white/70" : "text-slate-300"}`} />
                     </Link>
                   );
                 })}
@@ -1712,9 +1776,9 @@ export function SiteLayout() {
         <SiteFooter
           vrTechnologiesLogo={vrTechnologiesLogo}
           quickCategories={quickCategories}
-          footerSupportLinks={footerSupportLinks}
-          footerPolicyLinks={footerPolicyLinks}
+          footerLinks={footerLinks}
           primaryStore={primaryStore}
+          siteSettings={siteSettings}
         />
       )}
 
@@ -1746,20 +1810,26 @@ export function SiteLayout() {
       ) : null}
 
       <CompareBar />
+      <QuickViewModal />
+      <BackToTopButton />
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--vr-border)] bg-white/96 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
         <div className="flex items-center gap-1.5">
-          {mobileBottomLinks.map((item) => {
-            const target = item.label === "Profile" ? (user ? "/orders" : "/login") : item.to;
-            const isCart = item.label === "Cart";
+          {mobileLinks.map((item) => {
+            if (isExternalUrl(item.url)) {
+              return null;
+            }
+            const target = item.url === "/orders" && !user ? "/login" : item.url;
+            const Icon = getNavigationIcon(item);
+            const isCart = item.url === "/cart";
             return (
               <NavLink
-                key={item.label}
+                key={`${item.label}-${item.url}`}
                 to={target}
                 className={({ isActive }) => `vr-bottom-nav-link ${isActive ? "vr-bottom-nav-link-active" : "vr-bottom-nav-link-idle"}`}
               >
                 <div className="relative">
-                  <item.icon className="h-5 w-5" />
+                  <Icon className="h-5 w-5" />
                   {isCart && cartCount ? (
                     <motion.span
                       key={cartCount}

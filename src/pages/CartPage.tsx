@@ -113,7 +113,7 @@ export function CartPage() {
         <span className="text-[var(--vr-primary)]">Cart</span>
       </div>
 
-      <Card variant="hero" className="overflow-hidden">
+      <Card variant="hero" className="overflow-hidden border border-[rgba(30,58,138,0.08)] bg-[linear-gradient(135deg,#ffffff,#f8fbff)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <SectionHeader
             eyebrow="My Cart"
@@ -134,7 +134,7 @@ export function CartPage() {
           </div>
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_1fr]">
-          <Card variant="subtle">
+          <Card variant="subtle" className="rounded-[1.5rem] border border-[rgba(30,58,138,0.08)] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Total (incl. GST)</div>
             <div className="mt-3 text-3xl font-extrabold text-[var(--vr-text)]">
               <AnimatedNumber value={total} format={(n) => formatCurrency(n)} />
@@ -144,13 +144,13 @@ export function CartPage() {
               {gstRatePercent > 0 ? ` + GST ${formatCurrency(gstAmount)}` : ""}
             </div>
           </Card>
-          <Card variant="subtle">
+          <Card variant="subtle" className="rounded-[1.5rem] border border-[rgba(22,163,74,0.12)] bg-[linear-gradient(135deg,#ffffff,#f0fdf4)] shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">You saved</div>
             <div className="mt-3 text-3xl font-extrabold text-[var(--vr-success)]">
               <AnimatedNumber value={totalSavings} format={(n) => formatCurrency(n)} />
             </div>
           </Card>
-          <Card variant="subtle">
+          <Card variant="subtle" className="rounded-[1.5rem] border border-[rgba(30,58,138,0.08)] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-white p-2 text-[var(--vr-primary)] shadow-sm">
                 <Truck className="h-5 w-5" />
@@ -190,17 +190,17 @@ export function CartPage() {
                 exit={{ opacity: 0, x: 36, scale: 0.98 }}
                 transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
               >
-                <Card className="overflow-hidden p-0">
-                  <div className="grid gap-0 lg:grid-cols-[180px_1fr_220px]">
+                <Card className="overflow-hidden rounded-[1.8rem] border border-[rgba(30,58,138,0.08)] bg-white p-0 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+                  <div className="grid gap-0 lg:grid-cols-[190px_1fr_235px]">
                     <Link
                       to={`/products/${item.product.id}`}
-                      className="flex min-h-[180px] items-center justify-center border-b border-[var(--vr-border)] bg-[linear-gradient(135deg,#f8fbff,#eef4ff)] p-5 lg:border-b-0 lg:border-r"
+                      className="flex min-h-[190px] items-center justify-center border-b border-[var(--vr-border)] bg-[linear-gradient(135deg,#fbfdff,#eef4ff)] p-5 lg:border-b-0 lg:border-r"
                     >
                       {getProductPrimaryImage(item.product) ? (
                         <img
                           src={getProductPrimaryImage(item.product)}
                           alt={item.product.title}
-                          className="h-36 w-full object-contain transition duration-300 hover:scale-105"
+                          className="h-40 w-full object-contain transition duration-300 hover:scale-105"
                         />
                       ) : (
                         <div className="flex h-36 w-full items-center justify-center rounded-2xl border border-dashed border-[var(--vr-border)] text-sm text-[var(--vr-muted)]">
@@ -209,7 +209,7 @@ export function CartPage() {
                       )}
                     </Link>
 
-                    <div className="p-5">
+                    <div className="flex min-h-full flex-col p-5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-[rgba(30,58,138,0.08)] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--vr-primary)]">
                           {item.product.brandName ?? "VR Certified"}
@@ -222,7 +222,7 @@ export function CartPage() {
                       </div>
 
                       <Link to={`/products/${item.product.id}`}>
-                        <h2 className="mt-3 text-xl font-extrabold leading-snug text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
+                        <h2 className="mt-3 min-h-[3.6rem] line-clamp-2 text-xl font-extrabold leading-snug text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]">
                           {item.product.title}
                         </h2>
                       </Link>
@@ -232,7 +232,7 @@ export function CartPage() {
                         {item.product.storageGb ? ` | ${item.product.storageGb} GB storage` : ""}
                       </p>
 
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-[var(--vr-muted)]">
+                      <div className="mt-4 flex min-h-[2.5rem] flex-wrap gap-2 text-xs font-semibold text-[var(--vr-muted)]">
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--vr-border)] bg-white px-3 py-1.5">
                           <PackageCheck className="h-3.5 w-3.5 text-[var(--vr-primary)]" />
                           {item.product.stores?.length ?? 0} store(s)
@@ -243,8 +243,9 @@ export function CartPage() {
                         </span>
                       </div>
 
-                      <div className="mt-5 flex flex-wrap items-center gap-3">
-                        <div className="inline-flex items-center overflow-hidden rounded-2xl border border-[var(--vr-border)] bg-white shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                      <div className="mt-auto pt-5">
+                        <div className="flex flex-wrap items-center gap-3 rounded-[1.3rem] border border-[var(--vr-border)] bg-[linear-gradient(180deg,#fbfdff,#f4f8ff)] px-3 py-3">
+                          <div className="inline-flex items-center overflow-hidden rounded-2xl border border-[var(--vr-border)] bg-white shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                           <motion.button
                             type="button"
                             aria-label={`Decrease quantity for ${item.product.title}`}
@@ -279,14 +280,15 @@ export function CartPage() {
                           >
                             <Plus className="h-4 w-4" />
                           </motion.button>
+                          </div>
+                          <span className="text-xs font-semibold text-[var(--vr-muted)]">
+                            {formatCurrency(item.product.price)} each
+                          </span>
                         </div>
-                        <span className="text-xs font-semibold text-[var(--vr-muted)]">
-                          {formatCurrency(item.product.price)} each
-                        </span>
                       </div>
                     </div>
 
-                    <div className="flex flex-col justify-between gap-5 border-t border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-5 lg:border-l lg:border-t-0">
+                    <div className="flex flex-col justify-between gap-5 border-t border-[var(--vr-border)] bg-[linear-gradient(180deg,#fcfdff,#f7faff)] p-5 lg:border-l lg:border-t-0">
                       <div className="lg:text-right">
                         <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Line total</div>
                         <div className="mt-2 text-2xl font-extrabold text-[var(--vr-text)]">
@@ -301,7 +303,7 @@ export function CartPage() {
 
                       <button
                         type="button"
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[rgba(220,38,38,0.16)] bg-white px-4 py-3 text-sm font-bold text-[var(--vr-danger)] transition hover:bg-[rgba(220,38,38,0.08)]"
+                        className="inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-2xl border border-[rgba(220,38,38,0.16)] bg-white px-4 py-3 text-sm font-bold text-[var(--vr-danger)] shadow-[0_12px_28px_rgba(15,23,42,0.04)] transition hover:bg-[rgba(220,38,38,0.08)]"
                         onClick={() => {
                           if (user) {
                             syncCart(customerApi.removeCartItem(item.id as number), undefined, (nextCart) => {
@@ -330,7 +332,7 @@ export function CartPage() {
           transition={{ duration: 0.44, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
           className="space-y-4 lg:sticky lg:top-[13rem] lg:h-fit"
         >
-          <Card className="overflow-hidden p-0">
+          <Card className="overflow-hidden rounded-[1.8rem] border border-[rgba(30,58,138,0.08)] bg-white p-0 shadow-[0_20px_44px_rgba(15,23,42,0.08)]">
             <div className="bg-[linear-gradient(135deg,#1e3a8a,#233f9d)] p-5 text-white">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-white/12 p-3 text-white">
@@ -345,7 +347,7 @@ export function CartPage() {
             </div>
 
             <div className="p-5">
-            <div className="space-y-3 rounded-[1.4rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4 text-sm text-[var(--vr-muted)]">
+            <div className="space-y-3 rounded-[1.4rem] border border-[var(--vr-border)] bg-[linear-gradient(180deg,#fbfcff,#f4f8ff)] p-4 text-sm text-[var(--vr-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
               <div className="flex items-center justify-between">
                 <span>Total MRP</span>
                 <span>{formatCurrency(totalMrp)}</span>
@@ -379,11 +381,11 @@ export function CartPage() {
             </div>
 
             <div className="mt-4 grid gap-2 text-xs font-semibold text-[var(--vr-muted)]">
-              <div className="flex items-center gap-2 rounded-2xl border border-[var(--vr-border)] bg-white px-3 py-2.5">
+              <div className="flex items-center gap-2 rounded-2xl border border-[var(--vr-border)] bg-white px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
                 <ShieldCheck className="h-4 w-4 text-[var(--vr-success)]" />
                 Warranty and quality check included
               </div>
-              <div className="flex items-center gap-2 rounded-2xl border border-[var(--vr-border)] bg-white px-3 py-2.5">
+              <div className="flex items-center gap-2 rounded-2xl border border-[var(--vr-border)] bg-white px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
                 <Truck className="h-4 w-4 text-[var(--vr-primary)]" />
                 Delivery or store pickup selected next
               </div>

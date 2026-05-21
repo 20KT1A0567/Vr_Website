@@ -110,7 +110,7 @@ export function FilterSidebar({
   const isCompactSheet = !showCatalogSearch;
   const [brandSearch, setBrandSearch] = useState("");
   const [processorSearch, setProcessorSearch] = useState("");
-  const [activeSection, setActiveSection] = useState<FilterSectionKey | null>(isCompactSheet ? "brand" : "category");
+  const [activeSection, setActiveSection] = useState<FilterSectionKey | null>(isCompactSheet ? "brand" : null);
   const [localSearch, setLocalSearch] = useState(state.q || "");
   const debouncedLocalSearch = useDebouncedValue(localSearch, 300);
 
@@ -123,7 +123,7 @@ export function FilterSidebar({
   }, [state.q, debouncedLocalSearch]);
 
   useEffect(() => {
-    setActiveSection((current) => current ?? (isCompactSheet ? "brand" : "category"));
+    setActiveSection((current) => current ?? (isCompactSheet ? "brand" : null));
   }, [isCompactSheet]);
 
   const filteredBrands = useMemo(
@@ -329,13 +329,13 @@ export function FilterSidebar({
   /* ─── Desktop sidebar mode ────────────────────────────────── */
   return (
     <aside
-      className={`${sticky ? "lg:sticky" : ""} ${className}`.trim()}
+      className={`${sticky ? "lg:sticky" : ""} flex h-full flex-col ${className}`.trim()}
       style={sticky ? {
         top: stickyTop ?? "var(--sticky-offset, 9.5rem)",
       } : undefined}
     >
       {/* ── Header card ── */}
-      <div className="sticky top-0 z-10 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-[var(--vr-border)] bg-white px-4 py-3">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-[var(--vr-border)] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4 text-[var(--vr-primary)]" />
           <span className="text-[14px] font-bold text-[var(--vr-text)]">Filters</span>
@@ -447,22 +447,6 @@ export function FilterSidebar({
             onToggle={() => setActiveSection((c) => (c === "price" ? null : "price"))}
           >
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-1.5">
-                {BUDGET_PRESETS.map((preset) => {
-                  const isActive = state.minPrice === preset.min && state.maxPrice === preset.max;
-                  return (
-                    <button key={preset.label} type="button"
-                      onClick={() => setState((c) => ({ ...c, minPrice: preset.min, maxPrice: preset.max }))}
-                      className={`rounded-xl border px-2 py-2 text-[11px] font-semibold transition ${
-                        isActive
-                          ? "border-[var(--vr-primary)] bg-[rgba(30,58,138,0.07)] text-[var(--vr-primary)]"
-                          : "border-[var(--vr-border)] bg-white text-[var(--vr-text)] hover:border-[var(--vr-primary)]"
-                      }`}>
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
               <PriceSlider
                 bounds={priceBounds} minValue={sliderMin} maxValue={sliderMax}
                 minInput={state.minPrice} maxInput={state.maxPrice}
@@ -650,7 +634,7 @@ export function FilterSidebar({
             </div>
           </FilterSection>
 
-      </div>{/* end scroll body */}
+      </div>
     </aside>
   );
 }

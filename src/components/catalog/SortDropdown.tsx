@@ -45,7 +45,7 @@ export function SortDropdown<T extends string>({ value, options, onChange }: Sor
       <AnimatePresence>
         {open && (
           <motion.div
-            className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-20 overflow-hidden rounded-2xl border border-[var(--vr-border)] bg-white shadow-[0_24px_50px_rgba(15,23,42,0.1)]"
+            className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-[80] overflow-hidden rounded-2xl border border-[var(--vr-border)] bg-white shadow-[0_24px_50px_rgba(15,23,42,0.1)]"
             initial={{ opacity: 0, scale: 0.95, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -8 }}

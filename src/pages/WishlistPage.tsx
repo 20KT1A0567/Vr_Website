@@ -77,13 +77,11 @@ export function WishlistPage() {
 
   return (
     <div className="vr-page-shell space-y-6">
-
-      {/* ── Header ── */}
       <motion.section
         initial={{ opacity: 0, y: 22 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.42, ease: EASE }}
-        className="overflow-hidden rounded-[2rem] bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_100%)] px-6 py-9 text-white sm:px-10"
+        className="overflow-hidden rounded-[2rem] border border-[rgba(30,58,138,0.14)] bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_65%,#24439a_100%)] px-6 py-9 text-white shadow-[0_24px_60px_rgba(15,23,42,0.16)] sm:px-10"
       >
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -108,11 +106,12 @@ export function WishlistPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.32, duration: 0.3 }}
-              className="mt-1.5 text-sm text-white/55"
+              className="mt-1.5 text-sm text-white/60"
             >
-              {wishlist.length ? `${wishlist.length} item${wishlist.length !== 1 ? "s" : ""} saved` : "No saved items yet"}
+              {wishlist.length ? `${wishlist.length} item${wishlist.length !== 1 ? "s" : ""} saved for later` : "No saved items yet"}
             </motion.p>
           </div>
+
           {wishlist.length > 0 ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -134,7 +133,7 @@ export function WishlistPage() {
       </motion.section>
 
       {wishlist.length ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <AnimatePresence initial={false} mode="popLayout">
             {wishlist.map((product, index) => {
               const image = getProductPrimaryImage(product);
@@ -153,89 +152,103 @@ export function WishlistPage() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.94, x: 48, transition: { duration: 0.28, ease: EASE } }}
                   transition={{ delay: index * 0.06, duration: 0.36, ease: EASE }}
-                  className="flex gap-4 overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_4px_18px_rgba(15,23,42,0.06)] sm:gap-5 sm:p-5"
+                  className="overflow-hidden rounded-[1.75rem] border border-[rgba(30,58,138,0.08)] bg-white p-0 shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
                 >
-                  {/* Image */}
-                  <Link to={`/products/${product.id}`} className="shrink-0">
-                    <div className="h-24 w-24 overflow-hidden rounded-[1.1rem] bg-[#f4f7fd] sm:h-28 sm:w-28">
-                      {image ? (
-                        <img src={image} alt={product.title} className="h-full w-full object-contain p-2" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs text-slate-300">No image</div>
-                      )}
-                    </div>
-                  </Link>
-
-                  {/* Details */}
-                  <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--vr-muted)]">
-                        {product.brandName ?? "VR Certified"}
+                  <div className="flex gap-4 p-4 sm:gap-5 sm:p-5">
+                    <Link to={`/products/${product.id}`} className="shrink-0">
+                      <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[1.2rem] bg-[linear-gradient(135deg,#fbfdff,#eef4ff)] sm:h-28 sm:w-28">
+                        {image ? (
+                          <img src={image} alt={product.title} className="h-full w-full object-contain p-2" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs text-slate-300">No image</div>
+                        )}
                       </div>
-                      <Link
-                        to={`/products/${product.id}`}
-                        className="mt-1 block text-sm font-bold leading-snug text-[var(--vr-text)] transition hover:text-[var(--vr-primary)] sm:text-base line-clamp-2"
-                      >
-                        {product.title}
-                      </Link>
+                    </Link>
 
-                      {/* Rating + warranty */}
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--vr-muted)]">
-                        <span className="inline-flex items-center gap-1 font-semibold text-amber-500">
-                          <Star className="h-3 w-3 fill-current" />
-                          <span className="text-[var(--vr-text)]">{rating}</span>
-                        </span>
-                        <span>{reviewCount} reviews</span>
-                        <span className="inline-flex items-center gap-1 text-[var(--vr-success)]">
-                          <ShieldCheck className="h-3 w-3" />
-                          {getProductWarrantyLabel(product)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Price + actions */}
-                    <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
                       <div>
-                        <div className="text-xl font-extrabold text-[var(--vr-text)]">
-                          {formatCurrency(product.price)}
+                        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--vr-muted)]">
+                          {product.brandName ?? "VR Certified"}
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                          {product.originalPrice && product.originalPrice > product.price ? (
-                            <span className="text-slate-400 line-through">{formatCurrency(product.originalPrice)}</span>
-                          ) : null}
-                          {savings > 0 ? (
-                            <span className="font-bold text-[var(--vr-success)]">Save {formatCurrency(savings)}</span>
-                          ) : null}
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${lowStock ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"}`}>
-                            {getProductStockLabel(product)}
+                        <Link
+                          to={`/products/${product.id}`}
+                          className="mt-1 block min-h-[2.9rem] line-clamp-2 text-sm font-bold leading-snug text-[var(--vr-text)] transition hover:text-[var(--vr-primary)] sm:text-base"
+                        >
+                          {product.title}
+                        </Link>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--vr-muted)]">
+                          <span className="inline-flex items-center gap-1 font-semibold text-amber-500">
+                            <Star className="h-3 w-3 fill-current" />
+                            <span className="text-[var(--vr-text)]">{rating}</span>
+                          </span>
+                          <span>{reviewCount} reviews</span>
+                          <span className="inline-flex items-center gap-1 text-[var(--vr-success)]">
+                            <ShieldCheck className="h-3 w-3" />
+                            {getProductWarrantyLabel(product)}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <motion.button
-                          type="button"
-                          onClick={() => handleAddToCart(product)}
-                          disabled={isAddingThis}
-                          whileTap={{ scale: 0.96 }}
-                          whileHover={{ scale: 1.02 }}
-                          className="inline-flex items-center gap-2 rounded-[1rem] bg-[var(--vr-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--vr-primary-strong)] disabled:opacity-60"
-                        >
-                          <ShoppingCart className="h-3.5 w-3.5" />
-                          {isAddingThis ? "Adding…" : "Add to Cart"}
-                        </motion.button>
-                        <motion.button
-                          type="button"
-                          onClick={() => toggleWishlist(product)}
-                          disabled={isRemoving}
-                          title="Remove from wishlist"
-                          whileTap={{ scale: 0.93 }}
-                          className="inline-flex items-center gap-2 rounded-[1rem] border border-red-100 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">Remove</span>
-                        </motion.button>
+                      <div className="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                          <div className="text-xl font-extrabold text-[var(--vr-text)]">
+                            {formatCurrency(product.price)}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                            {product.originalPrice && product.originalPrice > product.price ? (
+                              <span className="text-slate-400 line-through">{formatCurrency(product.originalPrice)}</span>
+                            ) : null}
+                            {savings > 0 ? (
+                              <span className="font-bold text-[var(--vr-success)]">Save {formatCurrency(savings)}</span>
+                            ) : null}
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${lowStock ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"}`}>
+                              {getProductStockLabel(product)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <motion.button
+                            type="button"
+                            onClick={() => handleAddToCart(product)}
+                            disabled={isAddingThis}
+                            whileTap={{ scale: 0.96 }}
+                            whileHover={{ scale: 1.02 }}
+                            className="inline-flex min-h-[2.9rem] items-center gap-2 rounded-[1rem] bg-[var(--vr-primary)] px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(30,58,138,0.16)] transition hover:bg-[var(--vr-primary-strong)] disabled:opacity-60"
+                          >
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                            {isAddingThis ? "Adding..." : "Move to Cart"}
+                          </motion.button>
+                          <motion.button
+                            type="button"
+                            onClick={() => toggleWishlist(product)}
+                            disabled={isRemoving}
+                            title="Remove from wishlist"
+                            whileTap={{ scale: 0.93 }}
+                            className="inline-flex min-h-[2.9rem] items-center gap-2 rounded-[1rem] border border-red-100 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Remove</span>
+                          </motion.button>
+                        </div>
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[var(--vr-border)] bg-[linear-gradient(180deg,#fcfdff,#f7faff)] px-4 py-3 text-xs text-[var(--vr-muted)] sm:px-5">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--vr-border)] bg-white px-2.5 py-1">
+                        <ShieldCheck className="h-3.5 w-3.5 text-[var(--vr-success)]" />
+                        {getProductWarrantyLabel(product)}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--vr-border)] bg-white px-2.5 py-1">
+                        <Heart className="h-3.5 w-3.5 text-rose-500" fill="currentColor" />
+                        Saved for later
+                      </span>
+                      <span className="font-semibold text-[var(--vr-primary)]">
+                        {lowStock ? "Limited stock available" : "Ready when you are"}
+                      </span>
                     </div>
                   </div>
                 </motion.article>

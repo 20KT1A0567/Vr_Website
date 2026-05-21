@@ -65,6 +65,9 @@ export function CheckoutPage() {
   const { data: razorpaySettings } = useQuery({ queryKey: ["public-razorpay-settings"], queryFn: catalogApi.getRazorpaySettings });
   const { data: checkoutProfile } = useQuery({ queryKey: ["checkout-profile"], queryFn: customerApi.getCheckoutProfile, enabled: Boolean(user) });
   const { data: userProfile } = useQuery({ queryKey: ["user-profile"], queryFn: customerApi.getProfile, enabled: Boolean(user) });
+  const onlinePaymentsEnabled = Boolean(razorpaySettings?.enabled && razorpaySettings?.configured);
+  const pickupEnabled = siteSettings?.pickupEnabled ?? true;
+  const deliveryEnabled = siteSettings?.deliveryEnabled ?? true;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCouponLoading, setIsCouponLoading] = useState(false);
@@ -96,13 +99,13 @@ export function CheckoutPage() {
   }, [checkoutProfile, siteSettings?.defaultState, user?.email, user?.name, user?.phone, userProfile?.preferredContactEmail, userProfile?.preferredContactName, userProfile?.preferredContactPhone]);
 
   useEffect(() => {
-    if (siteSettings && !siteSettings.deliveryEnabled && form.deliveryType === "DELIVERY") {
+    if (siteSettings && !deliveryEnabled && form.deliveryType === "DELIVERY") {
       setForm((current) => ({ ...current, deliveryType: "PICKUP" }));
     }
-    if (siteSettings && !siteSettings.pickupEnabled && form.deliveryType === "PICKUP" && siteSettings.deliveryEnabled) {
+    if (siteSettings && !pickupEnabled && form.deliveryType === "PICKUP" && deliveryEnabled) {
       setForm((current) => ({ ...current, deliveryType: "DELIVERY" }));
     }
-  }, [form.deliveryType, siteSettings]);
+  }, [deliveryEnabled, form.deliveryType, pickupEnabled, siteSettings]);
 
   const availableStores = useMemo(() => {
     if (!cart.length) {
@@ -123,7 +126,6 @@ export function CheckoutPage() {
     }
   }, [availableStores, form.storeId]);
 
-  const onlinePaymentsEnabled = Boolean(razorpaySettings?.enabled && razorpaySettings?.configured);
   const paymentOptions = useMemo(
     () => basePaymentOptions.filter((option) => option.value === "CASH" || onlinePaymentsEnabled),
     [onlinePaymentsEnabled]
@@ -368,7 +370,7 @@ export function CheckoutPage() {
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               <button
                 type="button"
-                disabled={!siteSettings?.pickupEnabled}
+                disabled={!pickupEnabled}
                 onClick={() => setForm((current) => ({ ...current, deliveryType: "PICKUP" }))}
                 className={`rounded-2xl border px-4 py-4 text-left transition ${
                   form.deliveryType === "PICKUP" ? "border-[rgba(30,58,138,0.16)] bg-[var(--vr-surface-soft)]" : "border-[var(--vr-border)] bg-white"
@@ -379,7 +381,7 @@ export function CheckoutPage() {
               </button>
               <button
                 type="button"
-                disabled={!siteSettings?.deliveryEnabled}
+                disabled={!deliveryEnabled}
                 onClick={() => setForm((current) => ({ ...current, deliveryType: "DELIVERY" }))}
                 className={`rounded-2xl border px-4 py-4 text-left transition ${
                   form.deliveryType === "DELIVERY" ? "border-[rgba(30,58,138,0.16)] bg-[var(--vr-surface-soft)]" : "border-[var(--vr-border)] bg-white"
@@ -389,6 +391,12 @@ export function CheckoutPage() {
                 <div className="mt-1 text-sm leading-6 text-[var(--vr-muted)]">Deliver the order to the buyer&apos;s address.</div>
               </button>
             </div>
+
+            {siteSettings && !pickupEnabled && !deliveryEnabled ? (
+              <div className="mt-3 rounded-[1.2rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Pickup and home delivery are currently disabled in admin settings, so checkout cannot place a fulfillment order right now.
+              </div>
+            ) : null}
 
             <div className="mt-6">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--vr-primary)]">Select Store</div>

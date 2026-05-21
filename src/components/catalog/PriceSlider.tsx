@@ -1,6 +1,3 @@
-import { IndianRupee } from "lucide-react";
-import { formatCurrency } from "../../utils/catalog";
-
 interface PriceSliderProps {
   bounds: { min: number; max: number };
   minValue: number;
@@ -13,6 +10,26 @@ interface PriceSliderProps {
   onMaxInputChange: (value: string) => void;
   onMinInputCommit: () => void;
   onMaxInputCommit: () => void;
+}
+
+function formatRangeCurrency(value: number) {
+  return `\u20B9${Number(value).toLocaleString("en-IN")}`;
+}
+
+function applyBudget(
+  min: number,
+  max: number,
+  onMinInputChange: (value: string) => void,
+  onMaxInputChange: (value: string) => void,
+  onMinInputCommit: () => void,
+  onMaxInputCommit: () => void
+) {
+  onMinInputChange(String(min));
+  onMaxInputChange(String(max));
+  window.setTimeout(() => {
+    onMinInputCommit();
+    onMaxInputCommit();
+  }, 10);
 }
 
 export function PriceSlider({
@@ -32,113 +49,108 @@ export function PriceSlider({
   const safeRange = Math.max(1, bounds.max - bounds.min);
   const minProgress = ((minValue - bounds.min) / safeRange) * 100;
   const maxProgress = ((maxValue - bounds.min) / safeRange) * 100;
-
-  const quickBudgets = [
-    { label: "Under ₹25k", min: bounds.min, max: 25000 },
-    { label: "₹25k–₹40k", min: 25000, max: 40000 },
-    { label: "₹40k–₹60k", min: 40000, max: 60000 },
-    { label: "Above ₹60k", min: 60000, max: bounds.max }
-  ];
-
-  const handleBudgetClick = (min: number, max: number) => {
-    onMinInputChange(String(min));
-    onMaxInputChange(String(max));
-    setTimeout(() => {
-      onMinInputCommit();
-      onMaxInputCommit();
-    }, 10);
-  };
+  const histogramBars = [0.56, 0.78, 0.96, 0.72, 0.83, 0.98, 0.86, 0.34, 0.22];
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl border border-slate-100 bg-white p-3 pb-4 shadow-sm">
-        <div className="mb-2">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--vr-primary)]">Selected Range</div>
-          <div className="mt-1 text-xs text-slate-500">Drag the handles or type a budget.</div>
-        </div>
-        <div className="mb-4 inline-flex items-center justify-center rounded-full border border-blue-100 bg-blue-50/50 px-3 py-1.5 text-[11px] font-bold tracking-wide text-blue-700">
-          Rs. {minInput || bounds.min} to Rs. {maxInput || bounds.max}
+    <div className="space-y-4">
+      <div className="relative px-1 pt-1">
+        <div className="pointer-events-none mb-2 flex h-12 items-end gap-1 px-1">
+          {histogramBars.map((bar, index) => (
+            <div
+              key={index}
+              className="flex-1 rounded-t-[10px] bg-[rgba(132,204,22,0.10)]"
+              style={{ height: `${Math.max(16, Math.round(bar * 42))}px` }}
+            />
+          ))}
         </div>
 
-        <div className="relative mt-2 px-1.5">
-          <div className="absolute left-1.5 right-1.5 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200" />
-          <div
-            className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[linear-gradient(90deg,var(--vr-primary),#3b82f6)]"
-            style={{ left: `calc(${minProgress}% + 0.375rem)`, right: `calc(${100 - maxProgress}% + 0.375rem)` }}
-          />
+        <div className="absolute left-1 right-1 top-[2.05rem] h-1 -translate-y-1/2 rounded-full bg-[rgba(46,125,50,0.16)]" />
+        <div
+          className="absolute top-[2.05rem] h-1 -translate-y-1/2 rounded-full bg-[#2e7d32]"
+          style={{ left: `calc(${minProgress}% + 0.25rem)`, right: `calc(${100 - maxProgress}% + 0.25rem)` }}
+        />
+
+        <input
+          type="range"
+          min={bounds.min}
+          max={bounds.max}
+          step={rangeStep}
+          value={minValue}
+          onChange={(event) => onMinSliderChange(Number(event.target.value))}
+          className="vr-range-input relative h-5 w-full cursor-pointer bg-transparent accent-[#2e7d32]"
+        />
+        <input
+          type="range"
+          min={bounds.min}
+          max={bounds.max}
+          step={rangeStep}
+          value={maxValue}
+          onChange={(event) => onMaxSliderChange(Number(event.target.value))}
+          className="vr-range-input relative -mt-5 h-5 w-full cursor-pointer bg-transparent accent-[#2e7d32]"
+        />
+      </div>
+
+      <div className="flex items-center justify-between text-[18px] font-bold tracking-[-0.02em] text-slate-900">
+        <span>{formatRangeCurrency(minValue)}</span>
+        <span>{formatRangeCurrency(maxValue)}</span>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_18px_minmax(0,1fr)] items-center gap-2 pt-2">
+        <div className="flex min-w-0 items-center gap-2 rounded-[14px] border-[2px] border-slate-400 bg-white px-3 py-3">
+          <span className="shrink-0 text-[14px] font-semibold text-slate-700">\u20B9</span>
           <input
-            type="range"
-            min={bounds.min}
-            max={bounds.max}
-            step={rangeStep}
-            value={minValue}
-            onChange={(event) => onMinSliderChange(Number(event.target.value))}
-            className="vr-range-input relative h-5 w-full cursor-pointer bg-transparent"
+            value={minInput}
+            inputMode="numeric"
+            onChange={(event) => onMinInputChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+            onBlur={onMinInputCommit}
+            placeholder={String(bounds.min)}
+            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold tracking-[-0.02em] text-slate-900 outline-none"
           />
-          <input
-            type="range"
-            min={bounds.min}
-            max={bounds.max}
-            step={rangeStep}
-            value={maxValue}
-            onChange={(event) => onMaxSliderChange(Number(event.target.value))}
-            className="vr-range-input relative -mt-5 h-5 w-full cursor-pointer bg-transparent"
-          />
-        </div>
-        
-        <div className="mt-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-slate-400">
-          <span>Floor Rs. {bounds.min}</span>
-          <span>Ceiling Rs. {bounds.max}</span>
         </div>
 
-        <div className="mt-5 flex items-center gap-2">
-          <div className="relative flex-1 rounded-xl border border-slate-200 bg-slate-50/50">
-            <div className="absolute -top-2 left-2 bg-white px-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Starting from</div>
-            <IndianRupee className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-            <input
-              value={minInput}
-              inputMode="numeric"
-              onChange={(event) => onMinInputChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-              onBlur={onMinInputCommit}
-              placeholder={String(bounds.min)}
-              className="w-full bg-transparent py-2 pl-6 pr-2 text-xs font-semibold text-slate-700 outline-none"
-            />
-          </div>
-          <span className="text-[10px] font-bold uppercase text-slate-300">to</span>
-          <div className="relative flex-1 rounded-xl border border-slate-200 bg-slate-50/50">
-            <div className="absolute -top-2 left-2 bg-white px-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Up to</div>
-            <IndianRupee className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-            <input
-              value={maxInput}
-              inputMode="numeric"
-              onChange={(event) => onMaxInputChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-              onBlur={onMaxInputCommit}
-              placeholder={String(bounds.max)}
-              className="w-full bg-transparent py-2 pl-6 pr-2 text-xs font-semibold text-slate-700 outline-none"
-            />
-          </div>
+        <span className="text-center text-[22px] font-medium text-slate-300">-</span>
+
+        <div className="flex min-w-0 items-center gap-2 rounded-[14px] border-[2px] border-slate-400 bg-white px-3 py-3">
+          <span className="shrink-0 text-[14px] font-semibold text-slate-700">\u20B9</span>
+          <input
+            value={maxInput}
+            inputMode="numeric"
+            onChange={(event) => onMaxInputChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+            onBlur={onMaxInputCommit}
+            placeholder={String(bounds.max)}
+            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold tracking-[-0.02em] text-slate-900 outline-none"
+          />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick Budgets</div>
-        <div className="flex flex-wrap gap-1.5">
-          {quickBudgets.map((budget) => (
-            <button
-              key={budget.label}
-              onClick={() => handleBudgetClick(budget.min, budget.max)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-            >
-              {budget.label}
-            </button>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => applyBudget(bounds.min, 20000, onMinInputChange, onMaxInputChange, onMinInputCommit, onMaxInputCommit)}
+          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-600 transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)]"
+        >
+          Under {"\u20B9"}20K
+        </button>
+        <button
+          type="button"
+          onClick={() => applyBudget(bounds.min, 30000, onMinInputChange, onMaxInputChange, onMinInputCommit, onMaxInputCommit)}
+          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-600 transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)]"
+        >
+          Under {"\u20B9"}30K
+        </button>
+        <button
+          type="button"
+          onClick={() => applyBudget(bounds.min, 50000, onMinInputChange, onMaxInputChange, onMinInputCommit, onMaxInputCommit)}
+          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-600 transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)]"
+        >
+          Under {"\u20B9"}50K
+        </button>
       </div>
     </div>
   );

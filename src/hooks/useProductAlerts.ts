@@ -7,6 +7,7 @@ interface ProductAlert {
   productId: number;
   type: AlertType;
   email: string;
+  phone?: string;
   targetPrice?: number;
   createdAt: string;
 }
@@ -35,22 +36,22 @@ export function useProductAlerts(productId: number) {
     alerts.some((a) => a.productId === productId && a.type === type);
 
   const subscribe = useCallback(
-    (type: AlertType, email: string, targetPrice?: number) => {
+    (type: AlertType, email: string, targetPrice?: number, phone?: string) => {
       setAlerts((current) => {
         const filtered = current.filter(
           (a) => !(a.productId === productId && a.type === type)
         );
         const next = [
           ...filtered,
-          { productId, type, email, targetPrice, createdAt: new Date().toISOString() }
+          { productId, type, email, phone, targetPrice, createdAt: new Date().toISOString() }
         ];
         saveAlerts(next);
         return next;
       });
       if (type === "back-in-stock") {
-        customerApi.registerBackInStock(productId, email).catch(() => {});
+        customerApi.registerBackInStock(productId, email, phone).catch(() => {});
       } else {
-        customerApi.createPriceDropAlert(productId, email, targetPrice).catch(() => {});
+        customerApi.createPriceDropAlert(productId, email, targetPrice, phone).catch(() => {});
       }
     },
     [productId]

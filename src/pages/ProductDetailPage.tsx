@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
 import {
@@ -166,6 +166,12 @@ export function ProductDetailPage() {
   const { trackProduct } = useRecentlyViewed();
   const productQuery = useQuery({ queryKey: ["product", id], queryFn: () => catalogApi.getProduct(id), enabled: Boolean(id) });
   const product = productQuery.data;
+  const seoQuery = useQuery({
+    queryKey: ["seo-setting", "PRODUCT", product?.id ?? null],
+    queryFn: () => catalogApi.getSeoSetting({ targetType: "PRODUCT", targetId: product!.id }),
+    enabled: Boolean(product?.id)
+  });
+  const seoSetting = seoQuery.data;
   const relatedProductsQuery = useQuery({
     queryKey: ["related-products", product?.categoryId ?? null, product?.id ?? null],
     queryFn: () => catalogApi.getProducts(product?.categoryId ? { categoryId: product.categoryId } : undefined),
@@ -173,9 +179,12 @@ export function ProductDetailPage() {
   });
 
   usePageMeta({
-    title: product?.title,
-    description: product ? `Buy ${product.title} — certified refurbished with ${product.warrantyMonths ?? 6}-month warranty. ${product.processor ?? ""} ${product.ramGb ? product.ramGb + "GB RAM" : ""}`.trim() : undefined,
-    image: product?.images[0]?.imageUrl
+    title: seoSetting?.pageTitle ?? product?.seoTitle ?? product?.title,
+    description: seoSetting?.metaDescription ?? product?.seoDescription ?? (product ? `Buy ${product.title} certified refurbished with ${product.warrantyMonths ?? 6}-month warranty. ${product.processor ?? ""} ${product.ramGb ? product.ramGb + "GB RAM" : ""}`.trim() : undefined),
+    keywords: seoSetting?.metaKeywords ?? product?.seoKeywords,
+    image: seoSetting?.ogImageUrl ?? product?.images[0]?.imageUrl,
+    canonicalUrl: seoSetting?.canonicalUrl,
+    noIndex: seoSetting?.noIndex
   });
   const { reviews, addReview, averageRating } = useReviews(product?.id ?? 0);
   const { isAlerted, subscribe, unsubscribe } = useProductAlerts(product?.id ?? 0);
@@ -184,10 +193,39 @@ export function ProductDetailPage() {
   const [showVideo, setShowVideo] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
   const [pendingCartAction, setPendingCartAction] = useState<"cart" | "buyNow" | null>(null);
+  const [showStickyBar, setShowStickyBar] = useState(false);
+  const cartBtnsRef = useRef<HTMLDivElement>(null);
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: "", body: "", authorName: user?.name ?? "" });
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [alertEmail, setAlertEmail] = useState(user?.email ?? "");
+  const [alertPhone, setAlertPhone] = useState(user?.phone ?? "");
   const [showAlertForm, setShowAlertForm] = useState<"back-in-stock" | "price-drop" | null>(null);
+  const [showEnquiryForm, setShowEnquiryForm] = useState(false);
+  const [enquiryForm, setEnquiryForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "", email: user?.email ?? "", message: "" });
+  const [enquirySubmitting, setEnquirySubmitting] = useState(false);
+  const [enquiryDone, setEnquiryDone] = useState(false);
+
+  function handleShareProduct() {
+    if (!product) return;
+
+    if (navigator.share) {
+      navigator.share({ title: product.title, url: window.location.href });
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied to clipboard");
+    }
+  }
+
+  useEffect(() => {
+    const el = cartBtnsRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowStickyBar(!entry.isIntersecting),
+      { threshold: 0, rootMargin: "0px 0px -60px 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -893,7 +931,17 @@ export function ProductDetailPage() {
               {todayDealActive ? <StatusChip label="Today Deal" tone="danger" /> : null}
             </div>
 
-            <h1 className="mt-4 text-3xl font-extrabold leading-tight text-[var(--vr-text)] lg:text-[2.6rem]">{product.title}</h1>
+            <div className="mt-4 flex items-start justify-between gap-3">
+              <h1 className="text-3xl font-extrabold leading-tight text-[var(--vr-text)] lg:text-[2.6rem]">{product.title}</h1>
+              <button
+                type="button"
+                onClick={handleShareProduct}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--vr-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--vr-text)] transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)]"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share
+              </button>
+            </div>
             <p className="mt-3 text-sm leading-7 text-[var(--vr-muted)]">{detailTemplate.intro}</p>
             <p className="mt-2 text-sm text-slate-500">
               {getFieldValue(product, { source: "computed", key: "processorSummary", label: "Processor" }) ?? "Configured system"}
@@ -948,19 +996,39 @@ export function ProductDetailPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <Button
-                icon={<ShoppingCart className="h-4 w-4" />}
-                fullWidth
-                size="lg"
-                onClick={handleAddToCart}
-                disabled={pendingCartAction !== null}
-              >
-                {pendingCartAction === "cart" ? "Adding..." : "Add to Cart"}
-              </Button>
-              <Button variant="accent" fullWidth size="lg" onClick={handleBuyNow} disabled={pendingCartAction !== null}>
-                {pendingCartAction === "buyNow" ? "Continuing..." : "Buy Now"}
-              </Button>
+            <div ref={cartBtnsRef} className="mt-6 grid gap-3 sm:grid-cols-2">
+              {!product.available ? (
+                <>
+                  <div className="sm:col-span-2 flex items-center justify-center gap-2 rounded-[1.3rem] border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-400">
+                    <BellOff className="h-4 w-4" />
+                    Currently Out of Stock
+                  </div>
+                  <a
+                    href={`https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(`Hi, I'm interested in ${product.title}. Is it available?`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="sm:col-span-2 flex items-center justify-center gap-2 rounded-[1.3rem] bg-[#25D366] px-4 py-3.5 text-sm font-bold text-white transition hover:bg-[#20bd5a]"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Check Availability on WhatsApp
+                  </a>
+                </>
+              ) : (
+                <>
+                  <Button
+                    icon={<ShoppingCart className="h-4 w-4" />}
+                    fullWidth
+                    size="lg"
+                    onClick={handleAddToCart}
+                    disabled={pendingCartAction !== null}
+                  >
+                    {pendingCartAction === "cart" ? "Adding..." : "Add to Cart"}
+                  </Button>
+                  <Button variant="accent" fullWidth size="lg" onClick={handleBuyNow} disabled={pendingCartAction !== null}>
+                    {pendingCartAction === "buyNow" ? "Continuing..." : "Buy Now"}
+                  </Button>
+                </>
+              )}
               <Button
                 variant={wishlisted ? "danger" : "secondary"}
                 fullWidth
@@ -998,7 +1066,7 @@ export function ProductDetailPage() {
 
 
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            {/*
               <span className="text-xs font-semibold text-[var(--vr-muted)]">Share:</span>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(`Check out ${product.title} — ${window.location.href}`)}`}
@@ -1013,7 +1081,7 @@ export function ProductDetailPage() {
                 type="button"
                 onClick={() => {
                   if (navigator.share) {
-                    navigator.share({ title: product.title, url: window.location.href });
+                    navigator.share({ title: product?.title ?? "Product", url: window.location.href });
                   } else {
                     navigator.clipboard.writeText(window.location.href);
                     toast.success("Link copied to clipboard");
@@ -1033,50 +1101,50 @@ export function ProductDetailPage() {
                 <Send className="h-3.5 w-3.5" />
                 Instagram
               </a>
-            </div>
+            */}
 
+            {/* ── Back-in-stock / Price-drop alert ── */}
             {!product.available || (product.stockQuantity ?? 0) === 0 ? (
-              <div className="mt-4 rounded-[1.3rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4">
-                <div className="text-sm font-semibold text-[var(--vr-text)]">Get notified when available</div>
+              <div className="mt-4 rounded-[1.3rem] border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-amber-600" />
+                  <div className="text-sm font-semibold text-amber-800">Currently out of stock</div>
+                </div>
                 {isAlerted("back-in-stock") ? (
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-xs text-[var(--vr-success)]">You're on the back-in-stock list.</span>
-                    <button
-                      type="button"
-                      onClick={() => { unsubscribe("back-in-stock"); toast("Alert removed"); }}
-                      className="inline-flex items-center gap-1.5 text-xs text-[var(--vr-danger)]"
-                    >
-                      <BellOff className="h-3.5 w-3.5" /> Remove
+                    <span className="text-xs text-emerald-700 font-medium">✓ You're on the back-in-stock list.</span>
+                    <button type="button" onClick={() => { unsubscribe("back-in-stock"); toast("Alert removed"); }}
+                      className="inline-flex items-center gap-1 text-xs text-[var(--vr-danger)]">
+                      <BellOff className="h-3 w-3" /> Remove
                     </button>
                   </div>
                 ) : showAlertForm === "back-in-stock" ? (
-                  <div className="mt-3 flex gap-2">
-                    <input
-                      className="vr-input flex-1 py-2 text-xs"
-                      placeholder="Your email"
-                      value={alertEmail}
-                      onChange={(e) => setAlertEmail(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!alertEmail.includes("@")) { toast.error("Enter a valid email"); return; }
-                        subscribe("back-in-stock", alertEmail);
-                        setShowAlertForm(null);
-                        toast.success("You'll be notified when this item is back in stock");
-                      }}
-                      className="rounded-xl bg-[var(--vr-primary)] px-3 py-2 text-xs font-semibold text-white"
-                    >
-                      Notify Me
-                    </button>
+                  <div className="mt-3 space-y-2">
+                    <input className="vr-input w-full py-2 text-xs" placeholder="Email address *" value={alertEmail}
+                      onChange={(e) => setAlertEmail(e.target.value)} />
+                    <input className="vr-input w-full py-2 text-xs" placeholder="Phone number (optional)" value={alertPhone}
+                      onChange={(e) => setAlertPhone(e.target.value)} />
+                    <div className="flex gap-2">
+                      <button type="button"
+                        onClick={() => {
+                          if (!alertEmail.includes("@")) { toast.error("Enter a valid email"); return; }
+                          subscribe("back-in-stock", alertEmail, undefined, alertPhone || undefined);
+                          setShowAlertForm(null);
+                          toast.success("We'll notify you when this item is back in stock!");
+                        }}
+                        className="flex-1 rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700">
+                        Notify Me
+                      </button>
+                      <button type="button" onClick={() => setShowAlertForm(null)}
+                        className="rounded-xl border border-[var(--vr-border)] px-3 py-2 text-xs text-[var(--vr-muted)]">
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowAlertForm("back-in-stock")}
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--vr-primary)]"
-                  >
-                    <Bell className="h-3.5 w-3.5" /> Notify when in stock
+                  <button type="button" onClick={() => setShowAlertForm("back-in-stock")}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700">
+                    <Bell className="h-3.5 w-3.5" /> Notify when back in stock
                   </button>
                 )}
               </div>
@@ -1085,116 +1153,205 @@ export function ProductDetailPage() {
                 <div className="text-sm font-semibold text-[var(--vr-text)]">Price drop alert</div>
                 {isAlerted("price-drop") ? (
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-xs text-[var(--vr-success)]">You're watching this price.</span>
-                    <button
-                      type="button"
-                      onClick={() => { unsubscribe("price-drop"); toast("Alert removed"); }}
-                      className="inline-flex items-center gap-1.5 text-xs text-[var(--vr-danger)]"
-                    >
-                      <BellOff className="h-3.5 w-3.5" /> Remove
+                    <span className="text-xs text-emerald-700 font-medium">✓ You're watching this price.</span>
+                    <button type="button" onClick={() => { unsubscribe("price-drop"); toast("Alert removed"); }}
+                      className="inline-flex items-center gap-1 text-xs text-[var(--vr-danger)]">
+                      <BellOff className="h-3 w-3" /> Remove
                     </button>
                   </div>
                 ) : showAlertForm === "price-drop" ? (
-                  <div className="mt-3 flex gap-2">
-                    <input
-                      className="vr-input flex-1 py-2 text-xs"
-                      placeholder="Your email"
-                      value={alertEmail}
-                      onChange={(e) => setAlertEmail(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!alertEmail.includes("@")) { toast.error("Enter a valid email"); return; }
-                        subscribe("price-drop", alertEmail, product.price);
-                        setShowAlertForm(null);
-                        toast.success("You'll be notified if the price drops");
-                      }}
-                      className="rounded-xl bg-[var(--vr-primary)] px-3 py-2 text-xs font-semibold text-white"
-                    >
-                      Watch Price
-                    </button>
+                  <div className="mt-3 space-y-2">
+                    <input className="vr-input w-full py-2 text-xs" placeholder="Email address *" value={alertEmail}
+                      onChange={(e) => setAlertEmail(e.target.value)} />
+                    <input className="vr-input w-full py-2 text-xs" placeholder="Phone number (optional)" value={alertPhone}
+                      onChange={(e) => setAlertPhone(e.target.value)} />
+                    <div className="flex gap-2">
+                      <button type="button"
+                        onClick={() => {
+                          if (!alertEmail.includes("@")) { toast.error("Enter a valid email"); return; }
+                          subscribe("price-drop", alertEmail, product.price, alertPhone || undefined);
+                          setShowAlertForm(null);
+                          toast.success("We'll alert you if the price drops!");
+                        }}
+                        className="flex-1 rounded-xl bg-[var(--vr-primary)] px-3 py-2 text-xs font-semibold text-white">
+                        Watch Price
+                      </button>
+                      <button type="button" onClick={() => setShowAlertForm(null)}
+                        className="rounded-xl border border-[var(--vr-border)] px-3 py-2 text-xs text-[var(--vr-muted)]">
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowAlertForm("price-drop")}
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--vr-primary)]"
-                  >
+                  <button type="button" onClick={() => setShowAlertForm("price-drop")}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--vr-primary)]">
                     <Bell className="h-3.5 w-3.5" /> Alert me on price drop
                   </button>
                 )}
               </div>
             )}
 
-            <div className="mt-6 rounded-[1.4rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-4 text-sm text-[var(--vr-muted)]">
-              <div className="inline-flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-[var(--vr-primary)]" />
-                {product.stores.length} store(s) can fulfill this order
+            {/* ── Ask Availability / Enquiry form ── */}
+            <div className="mt-4 rounded-[1.3rem] border border-[var(--vr-border)] bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-[var(--vr-primary)]" />
+                  <span className="text-sm font-semibold text-[var(--vr-text)]">Ask about availability</span>
+                </div>
+                {!showEnquiryForm && !enquiryDone && (
+                  <button type="button" onClick={() => setShowEnquiryForm(true)}
+                    className="rounded-full bg-[rgba(30,58,138,0.08)] px-3 py-1 text-[11px] font-semibold text-[var(--vr-primary)] hover:bg-[rgba(30,58,138,0.14)]">
+                    Ask Now
+                  </button>
+                )}
               </div>
-              <div className="mt-3 inline-flex items-center gap-2">
-                <PhoneCall className="h-4 w-4 text-[var(--vr-primary)]" />
-                Store-backed phone support available
+
+              <AnimatePresence>
+                {enquiryDone ? (
+                  <motion.div key="done" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <span className="text-xs font-medium text-emerald-700">Enquiry sent! Our team will contact you shortly.</span>
+                  </motion.div>
+                ) : showEnquiryForm ? (
+                  <motion.div key="form" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                    className="mt-3 space-y-2 overflow-hidden">
+                    <input
+                      className="vr-input w-full py-2 text-xs"
+                      placeholder="Your name *"
+                      value={enquiryForm.name}
+                      onChange={(e) => setEnquiryForm((f) => ({ ...f, name: e.target.value }))}
+                    />
+                    <input
+                      className="vr-input w-full py-2 text-xs"
+                      placeholder="Phone number *"
+                      value={enquiryForm.phone}
+                      onChange={(e) => setEnquiryForm((f) => ({ ...f, phone: e.target.value }))}
+                    />
+                    <input
+                      className="vr-input w-full py-2 text-xs"
+                      placeholder="Email (optional)"
+                      value={enquiryForm.email}
+                      onChange={(e) => setEnquiryForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                    <textarea
+                      className="vr-input w-full resize-none py-2 text-xs"
+                      rows={2}
+                      placeholder="Your question or message (optional)"
+                      value={enquiryForm.message}
+                      onChange={(e) => setEnquiryForm((f) => ({ ...f, message: e.target.value }))}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={enquirySubmitting}
+                        onClick={async () => {
+                          if (!enquiryForm.name.trim()) { toast.error("Enter your name"); return; }
+                          if (!enquiryForm.phone.trim()) { toast.error("Enter your phone number"); return; }
+                          setEnquirySubmitting(true);
+                          try {
+                            await catalogApi.createEnquiry({
+                              name: enquiryForm.name.trim(),
+                              phone: enquiryForm.phone.trim(),
+                              email: enquiryForm.email.trim() || undefined,
+                              message: enquiryForm.message.trim() || undefined,
+                              productId: product.id,
+                              enquiryType: "PRODUCT_AVAILABILITY",
+                            });
+                            setEnquiryDone(true);
+                            setShowEnquiryForm(false);
+                          } catch {
+                            toast.error("Failed to send enquiry. Please try again.");
+                          } finally {
+                            setEnquirySubmitting(false);
+                          }
+                        }}
+                        className="flex-1 rounded-xl bg-[var(--vr-primary)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60 hover:bg-[var(--vr-primary-strong)]"
+                      >
+                        {enquirySubmitting ? "Sending…" : "Send Enquiry"}
+                      </button>
+                      <button type="button" onClick={() => setShowEnquiryForm(false)}
+                        className="rounded-xl border border-[var(--vr-border)] px-3 py-2 text-xs text-[var(--vr-muted)]">
+                        Cancel
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <p className="mt-1.5 text-[11px] text-[var(--vr-muted)]">
+                    Questions about stock, specs, or delivery? Our team responds quickly.
+                  </p>
+                )}
+              </AnimatePresence>
+
+              {/* WhatsApp + store info */}
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--vr-border)] pt-3 text-xs text-[var(--vr-muted)]">
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-[var(--vr-primary)]" />
+                  {product.stores.length} store{product.stores.length !== 1 ? "s" : ""} available
+                </span>
+                <a href={`https://wa.me/${whatsappNumber.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 hover:text-emerald-800">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  WhatsApp us
+                </a>
               </div>
-              <a href={`https://wa.me/${whatsappNumber.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 font-semibold text-[var(--vr-primary)]">
-                <MessageCircle className="h-4 w-4" />
-                WhatsApp quick enquiry
-              </a>
             </div>
           </Card>
         </motion.aside>
       </div>
 
-      <Card>
-        <SectionHeader
-          eyebrow="Store Availability"
-          title="Nearby branches that can fulfill this order"
-          description="Pickup, support, and follow-up stay tied to real stores so buyers feel more secure ordering refurbished tech."
-          action={<span className="rounded-full border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--vr-text)]">{product.stores.length} mapped store(s)</span>}
-        />
+      <div className="rounded-[1.6rem] border border-[var(--vr-border)] bg-white p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-[var(--vr-primary)]" />
+            <span className="text-[13px] font-bold text-[var(--vr-text)]">Available Stores</span>
+            <span className="rounded-full bg-[var(--vr-primary)] px-2 py-0.5 text-[10px] font-black text-white">{product.stores.length}</span>
+          </div>
+        </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {product.stores.map((store) => (
-            <Card key={store.id} variant="subtle">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-bold text-[var(--vr-text)]">{store.name}</h3>
-                  <p className="mt-2 text-sm leading-7 text-[var(--vr-muted)]">
-                    {store.address}, {store.city}, {store.state}
-                  </p>
-                </div>
-                <StatusChip label={store.active ? "Available" : "Inactive"} tone={store.active ? "success" : "danger"} />
+            <div key={store.id} className="flex flex-col gap-2 rounded-[1.1rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-3">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[13px] font-bold leading-tight text-[var(--vr-text)]">{store.name}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${store.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                  {store.active ? "Open" : "Closed"}
+                </span>
               </div>
-
-              <div className="mt-4 space-y-2 text-sm text-[var(--vr-muted)]">
-                <div className="inline-flex items-center gap-2">
-                  <PhoneCall className="h-4 w-4 text-[var(--vr-primary)]" />
+              <p className="text-[11px] leading-5 text-[var(--vr-muted)] line-clamp-2">
+                {store.city}, {store.state}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--vr-muted)]">
+                <span className="inline-flex items-center gap-1">
+                  <PhoneCall className="h-3 w-3 text-[var(--vr-primary)]" />
                   {store.phone}
-                </div>
+                </span>
                 {store.timings ? (
-                  <div className="inline-flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-[var(--vr-primary)]" />
+                  <span className="inline-flex items-center gap-1">
+                    <Package className="h-3 w-3 text-[var(--vr-primary)]" />
                     {store.timings}
-                  </div>
+                  </span>
                 ) : null}
               </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="mt-auto flex gap-1.5 pt-1">
                 {store.mapLink ? (
-                  <a href={store.mapLink} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-2xl bg-[var(--vr-primary)] px-4 py-3 text-sm font-semibold text-white">
+                  <a href={store.mapLink} target="_blank" rel="noreferrer"
+                    className="flex flex-1 items-center justify-center rounded-xl bg-[var(--vr-primary)] px-2 py-1.5 text-[11px] font-semibold text-white">
                     Directions
                   </a>
                 ) : null}
                 {store.whatsapp ? (
-                  <a href={`https://wa.me/${store.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-2xl border border-[var(--vr-border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--vr-text)]">
+                  <a href={`https://wa.me/${store.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+                    className="flex flex-1 items-center justify-center rounded-xl border border-[var(--vr-border)] bg-white px-2 py-1.5 text-[11px] font-semibold text-[var(--vr-text)]">
                     WhatsApp
                   </a>
                 ) : null}
               </div>
-            </Card>
+            </div>
           ))}
         </div>
-      </Card>
+      </div>
 
       {relatedProducts.length ? (
         <section>
@@ -1217,6 +1374,54 @@ export function ProductDetailPage() {
           </div>
         </section>
       ) : null}
+
+      {/* ── Sticky Add-to-Cart bar (desktop) — only shown when product is in stock ── */}
+      <AnimatePresence>
+        {showStickyBar && product && product.available && (
+          <motion.div
+            key="sticky-cart-bar"
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 36 }}
+            className="fixed bottom-0 left-0 right-0 z-[90] hidden border-t border-[var(--vr-border)] bg-white/95 shadow-[0_-8px_30px_rgba(15,23,42,0.10)] backdrop-blur-md lg:block"
+          >
+            <div className="mx-auto flex max-w-[1200px] items-center gap-4 px-8 py-3">
+              {/* Thumbnail */}
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] p-1">
+                {product.images[0]?.imageUrl ? (
+                  <img src={product.images[0].imageUrl} alt="" className="h-full w-full object-contain" />
+                ) : null}
+              </div>
+              {/* Title + price */}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-bold text-[var(--vr-text)]">{product.title}</div>
+                <div className="text-[15px] font-black text-slate-900">{formatCurrency(product.price)}</div>
+              </div>
+              {/* Buttons */}
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={pendingCartAction !== null}
+                  className="flex h-10 items-center gap-2 rounded-[12px] bg-[var(--vr-primary)] px-5 text-[13px] font-semibold text-white transition hover:bg-[var(--vr-primary-strong)] disabled:opacity-60"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  {pendingCartAction === "cart" ? "Adding…" : "Add to Cart"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBuyNow}
+                  disabled={pendingCartAction !== null}
+                  className="flex h-10 items-center gap-2 rounded-[12px] bg-[var(--vr-accent)] px-5 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                >
+                  Buy Now
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <StickyMobileBar>
         <div className="flex items-center justify-between gap-3">

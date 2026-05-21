@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, Laptop2, MapPin, ShieldCheck, Sparkles, Star, Store, Truck, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Laptop2, MapPin, ShieldCheck, Sparkles, Star, Store } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ProductCard } from "components/catalog/ProductCard";
 import { getButtonClassName } from "components/ui/Button";
@@ -22,7 +22,7 @@ import {
 } from "components/ui/RevealComponents";
 import { useSelectedStore } from "store/storeStore";
 import { catalogApi } from "api/client";
-import type { Category, HomeSection, Product } from "types";
+import type { Category, HomeSection, HomepageBuilderConfig, HomepageBuilderWhyCard, Product } from "types";
 import { getApiErrorMessage } from "../utils/api";
 import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
 import {
@@ -49,40 +49,80 @@ const homeSectionEyebrows = {
   LOW_PRICE_DEALS: "Low Price Deals"
 } as const;
 
-const trustBar = [
-  { title: "Warranty Included", subtitle: "Coverage with every eligible product", icon: ShieldCheck },
-  { title: "Quality Checked", subtitle: "Professionally tested before dispatch", icon: CheckCircle2 },
-  { title: "Easy Returns", subtitle: "Simple return support from our team", icon: Undo2 },
-  { title: "Fast Delivery", subtitle: "Pickup and delivery across branches", icon: Truck }
-] as const;
-
-const buyerAssurance = [
-  {
-    title: "Certified Refurbishment",
-    description: "Every listed machine is positioned around condition, warranty, and practical buyer-ready specs.",
-    stat: "100+ checks",
-    icon: CheckCircle2
-  },
-  {
-    title: "Store-Backed Support",
-    description: "Customers can see branch availability and contact support before they commit to checkout.",
-    stat: "Live stores",
-    icon: Store
-  },
-  {
-    title: "Clear Price Confidence",
-    description: "Discounts, original price, savings, and stock context stay visible across product cards.",
-    stat: "Transparent deals",
-    icon: Sparkles
-  }
-] as const;
-
 const useCasePresets = [
   { title: "Student Essentials", description: "Portable, affordable systems for classes and study.", link: "/products?maxPrice=30000", icon: Laptop2 },
   { title: "Office Productivity", description: "Reliable multitasking laptops for daily work.", link: "/products?ram=8", icon: Sparkles },
   { title: "Design and Editing", description: "More RAM and sharper displays for creative workflows.", link: "/products?ram=16", icon: ShieldCheck },
   { title: "Gaming and Performance", description: "High-spec machines with standout graphics value.", link: "/products?category=gaming%20laptops", icon: Store }
 ] as const;
+
+const defaultHomepageBuilderConfig: HomepageBuilderConfig = {
+  announcementBar: {
+    enabled: false,
+    text: "Free pickup and warranty support across our branch network.",
+    linkLabel: "Contact support",
+    linkUrl: "/contact"
+  },
+  featuredCategoryIds: [],
+  sections: [
+    { type: "HERO_BANNER", enabled: true, order: 1 },
+    { type: "FEATURED_CATEGORIES", enabled: true, order: 2 },
+    { type: "FEATURED_PRODUCTS", enabled: true, order: 3 },
+    { type: "BEST_SELLERS", enabled: true, order: 4 },
+    { type: "OFFER_BANNER", enabled: true, order: 5 },
+    { type: "TRUST_BADGES", enabled: true, order: 6 },
+    { type: "WHY_CHOOSE_US", enabled: true, order: 7 },
+    { type: "ANNOUNCEMENT_BAR", enabled: false, order: 0 }
+  ],
+  trustBadges: [
+    { label: "12-Month Warranty" },
+    { label: "Quality Checked" },
+    { label: "7-Day Easy Returns" },
+    { label: "Fast Delivery Across India" }
+  ],
+  whyChooseUsCards: [
+    { tone: "blue", stat: "12-Month", title: "Warranty Included", desc: "Every eligible product ships with store-backed carry-in warranty." },
+    { tone: "emerald", stat: "100+ Checks", title: "Quality Certified", desc: "Multi-point inspection before every single dispatch." },
+    { tone: "amber", stat: "4 Stores", title: "Walk-in Support", desc: "Physical branches for pickup and service." },
+    { tone: "rose", stat: "7-Day", title: "Easy Returns", desc: "Hassle-free returns handled directly by our store team." }
+  ]
+};
+
+function parseHomepageBuilder(value?: string): HomepageBuilderConfig {
+  if (!value) {
+    return defaultHomepageBuilderConfig;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<HomepageBuilderConfig>;
+    return {
+      announcementBar: {
+        ...defaultHomepageBuilderConfig.announcementBar,
+        ...(parsed.announcementBar ?? {})
+      },
+      featuredCategoryIds: parsed.featuredCategoryIds ?? defaultHomepageBuilderConfig.featuredCategoryIds,
+      sections: parsed.sections?.length ? parsed.sections : defaultHomepageBuilderConfig.sections,
+      trustBadges: parsed.trustBadges?.length ? parsed.trustBadges : defaultHomepageBuilderConfig.trustBadges,
+      whyChooseUsCards: parsed.whyChooseUsCards?.length ? parsed.whyChooseUsCards : defaultHomepageBuilderConfig.whyChooseUsCards
+    };
+  } catch {
+    return defaultHomepageBuilderConfig;
+  }
+}
+
+function getWhyCardToneClasses(tone: HomepageBuilderWhyCard["tone"]) {
+  switch (tone) {
+    case "emerald":
+      return { bg: "bg-emerald-50", color: "text-emerald-600" };
+    case "amber":
+      return { bg: "bg-amber-50", color: "text-amber-600" };
+    case "rose":
+      return { bg: "bg-rose-50", color: "text-rose-600" };
+    case "blue":
+    default:
+      return { bg: "bg-blue-50", color: "text-blue-600" };
+  }
+}
 
 function resolveBannerLink(linkUrl?: string, fallback = "/products") {
   const normalized = linkUrl?.trim().toLowerCase();
@@ -242,12 +282,13 @@ function CountUpStat({ value, suffix = "", decimals = 0 }: { value: number; suff
 }
 
 export function HomePage() {
-  usePageMeta();
   const [now, setNow] = useState(() => Date.now());
   const { recentlyViewed, clearHistory } = useRecentlyViewed();
   const bannersQuery = useQuery({ queryKey: ["banners"], queryFn: () => catalogApi.getBanners() });
   const useCaseBannersQuery = useQuery({ queryKey: ["banners", "USE_CASE"], queryFn: () => catalogApi.getBanners("USE_CASE") });
   const homeSectionsQuery = useQuery({ queryKey: ["home-sections"], queryFn: catalogApi.getHomeSections });
+  const siteSettingsQuery = useQuery({ queryKey: ["site-settings"], queryFn: catalogApi.getSiteSettings });
+  const seoQuery = useQuery({ queryKey: ["seo-setting", "HOME"], queryFn: () => catalogApi.getSeoSetting({ targetType: "HOME" }) });
   const featuredProductsQuery = useQuery({ queryKey: ["home-featured-products"], queryFn: () => catalogApi.getFeaturedProducts(8) });
   const todaysDealsQuery = useQuery({ queryKey: ["home-todays-deals"], queryFn: () => catalogApi.getTodaysDeals(8) });
   const bestSellersQuery = useQuery({ queryKey: ["home-best-sellers"], queryFn: () => catalogApi.getBestSellers(8) });
@@ -257,11 +298,21 @@ export function HomePage() {
     queryKey: ["home-products", selectedStoreId],
     queryFn: () => catalogApi.getProducts(selectedStoreId ? { storeId: selectedStoreId } : undefined)
   });
+  const seoSetting = seoQuery.data;
+  usePageMeta({
+    title: seoSetting?.pageTitle,
+    description: seoSetting?.metaDescription,
+    keywords: seoSetting?.metaKeywords,
+    image: seoSetting?.ogImageUrl,
+    canonicalUrl: seoSetting?.canonicalUrl,
+    noIndex: seoSetting?.noIndex
+  });
   const categoriesQuery = useQuery({ queryKey: ["home-categories"], queryFn: catalogApi.getCategories });
   const storesQuery = useQuery({ queryKey: ["home-stores"], queryFn: catalogApi.getStores });
 
   const banners = bannersQuery.data ?? [];
   const homeSections = homeSectionsQuery.data ?? [];
+  const siteSettings = siteSettingsQuery.data;
   const featuredProducts = featuredProductsQuery.data ?? [];
   const todaysDeals = todaysDealsQuery.data ?? [];
   const bestSellers = bestSellersQuery.data ?? [];
@@ -269,10 +320,15 @@ export function HomePage() {
   const allProducts = allProductsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
   const stores = storesQuery.data ?? [];
+  const homepageBuilder = useMemo(() => parseHomepageBuilder(siteSettings?.homepageBuilderJson), [siteSettings?.homepageBuilderJson]);
+
+  const includeDefault = siteSettings?.includeDefaultHomeSections ?? true;
+  const defaultTypesStr = siteSettings?.defaultHomeSectionTypes ?? "TODAYS_DEALS,FEATURED_PRODUCTS,BEST_SELLERS,NEW_ARRIVALS,LOW_PRICE_DEALS";
 
   const firstError =
     bannersQuery.error ??
     homeSectionsQuery.error ??
+    siteSettingsQuery.error ??
     featuredProductsQuery.error ??
     todaysDealsQuery.error ??
     bestSellersQuery.error ??
@@ -352,75 +408,89 @@ export function HomePage() {
         return (left.id ?? Number.MAX_SAFE_INTEGER) - (right.id ?? Number.MAX_SAFE_INTEGER);
       });
 
-    if (configuredSections.length > 0) {
+    // If default sections are disabled and we have custom curated ones, only show the custom ones.
+    // If custom curated ones are empty, we still fallback to default sections so the homepage is never empty.
+    if (!includeDefault && configuredSections.length > 0) {
       return configuredSections;
     }
 
-    const apiFallbackSections: HomeSection[] = [
-      {
-        id: -1,
-        title: "Today's Deals",
-        subtitle: "Time-sensitive deals pulled from the live backend pricing rules.",
-        sectionType: "TODAYS_DEALS" as const,
-        displayOrder: 0,
-        maxProducts: 8,
-        products: todaysDeals
-      },
-      {
-        id: -2,
-        title: "Handpicked picks worth spotlighting",
-        subtitle: "Featured products curated through the backend and admin panel.",
-        sectionType: "FEATURED_PRODUCTS" as const,
-        displayOrder: 1,
-        maxProducts: 8,
-        products: featuredProducts
-      },
-      {
-        id: -3,
-        title: "Our most-loved picks",
-        subtitle: "Best sellers coming directly from the website order history.",
-        sectionType: "BEST_SELLERS" as const,
-        displayOrder: 2,
-        maxProducts: 8,
-        products: bestSellers
-      },
-      {
-        id: -4,
-        title: "Fresh arrivals - just in",
-        subtitle: "Recently added products ready to go live on the storefront.",
-        sectionType: "NEW_ARRIVALS" as const,
-        displayOrder: 3,
-        maxProducts: 8,
-        products: newArrivals
+    const activeDefaultTypes = defaultTypesStr.split(",").map((t) => t.trim()).filter(Boolean);
+    const defaultSections: HomeSection[] = [];
+
+    activeDefaultTypes.forEach((type, index) => {
+      let title = "";
+      let subtitle = "";
+      let products: Product[] = [];
+
+      switch (type) {
+        case "TODAYS_DEALS":
+          title = "Today's Deals";
+          subtitle = "Time-sensitive deals pulled from the live backend pricing rules.";
+          products = todaysDeals;
+          break;
+        case "FEATURED_PRODUCTS":
+          title = "Handpicked picks worth spotlighting";
+          subtitle = "Featured products curated through the backend and admin panel.";
+          products = featuredProducts;
+          break;
+        case "BEST_SELLERS":
+          title = "Our most-loved picks";
+          subtitle = "Best sellers coming directly from the website order history.";
+          products = bestSellers;
+          break;
+        case "NEW_ARRIVALS":
+          title = "Fresh arrivals - just in";
+          subtitle = "Recently added products ready to go live on the storefront.";
+          products = newArrivals;
+          break;
+        case "LOW_PRICE_DEALS":
+          title = "Low Price Deals";
+          subtitle = "Super discount budget items selected for you.";
+          products = spotlightProducts.filter(p => (p.discountPercent && p.discountPercent > 0) || (p.originalPrice && p.originalPrice > p.price)).slice(0, 8);
+          break;
       }
-    ]
-      .filter((section) => section.products.length > 0)
-      .sort((left, right) => left.displayOrder - right.displayOrder);
 
-    if (apiFallbackSections.length > 0) {
-      return apiFallbackSections;
-    }
+      if (products.length > 0) {
+        defaultSections.push({
+          id: -index - 1,
+          title,
+          subtitle,
+          sectionType: type as any,
+          displayOrder: index,
+          maxProducts: 8,
+          products
+        });
+      }
+    });
 
-    return spotlightProducts.length
-      ? [
-          {
-            id: -5,
-            title: "Featured Products",
-            subtitle: "Admin sections are empty right now, so we are showing the strongest live inventory instead.",
-            sectionType: "FEATURED_PRODUCTS" as const,
-            displayOrder: 0,
-            maxProducts: 8,
-            products: spotlightProducts.slice(0, 8)
-          }
-        ]
-      : [];
-  }, [bestSellers, featuredProducts, homeSections, newArrivals, spotlightProducts, todaysDeals]);
+    const configuredTypes = new Set(configuredSections.map((s) => s.sectionType));
+    const mergedSections = [...configuredSections];
+    defaultSections.forEach((section) => {
+      if (!configuredTypes.has(section.sectionType)) {
+        mergedSections.push(section);
+      }
+    });
 
-  const categoryCards = orderedCategories.slice(0, 4).map((category) => {
-    const leadProduct = (productsByCategory.get(category.id) ?? [])[0];
-    const previewImage = category.iconUrl ?? getProductPrimaryImage(leadProduct ?? { images: [] });
-    return { category, previewImage };
-  });
+    return mergedSections.sort((left, right) => {
+      const leftOrder = left.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return (left.id ?? Number.MAX_SAFE_INTEGER) - (right.id ?? Number.MAX_SAFE_INTEGER);
+    });
+  }, [bestSellers, featuredProducts, homeSections, newArrivals, spotlightProducts, todaysDeals, includeDefault, defaultTypesStr]);
+
+  const categoryCards = useMemo(() => {
+    const scopedCategories = homepageBuilder.featuredCategoryIds.length > 0
+      ? orderedCategories.filter((category) => homepageBuilder.featuredCategoryIds.includes(category.id))
+      : orderedCategories.slice(0, 4);
+    return scopedCategories.slice(0, 8).map((category) => {
+      const leadProduct = (productsByCategory.get(category.id) ?? [])[0];
+      const previewImage = category.iconUrl ?? getProductPrimaryImage(leadProduct ?? { images: [] });
+      return { category, previewImage };
+    });
+  }, [homepageBuilder.featuredCategoryIds, orderedCategories, productsByCategory]);
 
   const nearbyStores = useMemo(
     () =>
@@ -451,16 +521,19 @@ export function HomePage() {
     stores.length > 0
       ? (stores.reduce((sum, store) => sum + (store.googleRating ?? 0), 0) / stores.length).toFixed(1)
       : "4.8";
-  const homeTrustStats = [
-    { value: trustedCustomerCount, suffix: "+", label: "trusted customers", description: "Across walk-in, WhatsApp, and website enquiries." },
-    { value: stores.length || 4, suffix: "", label: "active stores", description: "Branch-backed pickup, support, and fulfillment." },
-    { value: allProducts.length || 75, suffix: "+", label: "ready products", description: "Refurbished laptops, desktops, accessories, and monitors." },
-    { value: Number(averageStoreRating), suffix: "/5", decimals: 1, label: "store rating", description: "Real branch trust signals shown near products." }
-  ];
+  const featuredProductsSection = useMemo(
+    () => homeProductSections.find((section) => section.sectionType === "FEATURED_PRODUCTS") ?? null,
+    [homeProductSections]
+  );
+  const bestSellersSection = useMemo(
+    () => homeProductSections.find((section) => section.sectionType === "BEST_SELLERS") ?? null,
+    [homeProductSections]
+  );
 
   if (
     bannersQuery.isLoading ||
     homeSectionsQuery.isLoading ||
+    siteSettingsQuery.isLoading ||
     featuredProductsQuery.isLoading ||
     todaysDealsQuery.isLoading ||
     bestSellersQuery.isLoading ||
@@ -476,6 +549,349 @@ export function HomePage() {
   const heroHasOverlayContent = !heroHasMedia && Boolean(
     isMeaningfulCatalogValue(heroBanner?.title) || isMeaningfulCatalogValue(heroBanner?.subtitle) || !heroDesktopImage
   );
+  const additionalHomeSections = homeProductSections.filter(
+    (section) => section.sectionType !== "FEATURED_PRODUCTS" && section.sectionType !== "BEST_SELLERS"
+  );
+
+  const heroSection: ReactNode = (
+    <section className="overflow-hidden rounded-[2rem] border border-[var(--vr-border)] bg-white p-1.5 shadow-[0_22px_55px_rgba(15,23,42,0.08)] lg:sticky lg:top-[8.9rem] lg:z-20">
+      <Link to={heroLink} className="block">
+        <div
+          className={`group relative overflow-hidden rounded-[1.7rem] ${
+            heroHasOverlayContent
+              ? "bg-[linear-gradient(135deg,#edf4ff,#dbeafe_48%,#fff7ed)]"
+              : "bg-white"
+          }`}
+        >
+          {!heroHasOverlayContent ? <div className="aspect-[16/7] min-h-[260px] w-full sm:min-h-[340px] lg:min-h-[430px]" /> : null}
+          {heroBanner?.mediaType === "VIDEO" && heroBanner.videoUrl ? (
+            heroUsesDirectVideo ? (
+              <BannerVideo
+                src={heroBanner.videoUrl}
+                poster={heroDesktopImage}
+                className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "opacity-[0.96]" : ""}`}
+              />
+            ) : heroVideoEmbedUrl ? (
+              <iframe
+                src={`${heroVideoEmbedUrl}?autoplay=1&mute=1&controls=1&loop=1&playsinline=1&rel=0&modestbranding=1`}
+                title={heroTitle}
+                className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "scale-[1.06] opacity-[0.96]" : ""}`}
+                allow="autoplay; encrypted-media; picture-in-picture"
+              />
+            ) : null
+          ) : heroDesktopImage ? (
+            <picture>
+              {heroMobileImage ? <source media="(max-width: 768px)" srcSet={heroMobileImage} /> : null}
+              <img
+                src={heroDesktopImage}
+                alt={heroTitle}
+                loading="eager"
+                decoding="async"
+                className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "opacity-[0.95]" : ""}`}
+              />
+            </picture>
+          ) : null}
+
+          {heroHasOverlayContent ? (
+            <>
+              <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.88)_34%,rgba(248,250,252,0.35)_68%,rgba(255,255,255,0.08)_100%)]" />
+              <div className="relative z-10 grid min-h-[430px] items-end gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-9">
+                <div className="max-w-[620px]">
+                  <motion.div
+                    className="flex flex-wrap items-center gap-2"
+                    initial={{ opacity: 0, y: -14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <Badge tone="accent" className="bg-[rgba(245,158,11,0.18)] text-[#b45309]">
+                      {heroBanner?.mediaType === "VIDEO" ? "Video Campaign Live" : "Premium Refurbished Picks"}
+                    </Badge>
+                    {heroCategory ? <Badge tone="primary">{heroCategory.name}</Badge> : null}
+                  </motion.div>
+                  <motion.h1
+                    className="display-font mt-5 text-[2.3rem] font-extrabold leading-[1.02] text-[var(--vr-dark)] sm:text-[2.8rem] lg:text-[3.55rem]"
+                    initial={{ opacity: 0, y: 26 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.65, delay: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    {heroTitle}
+                  </motion.h1>
+                  {heroSubtitle ? (
+                    <motion.p
+                      className="mt-4 max-w-[520px] text-base leading-8 text-[var(--vr-muted)] lg:text-lg"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.5, delay: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      {heroSubtitle}
+                    </motion.p>
+                  ) : null}
+                  <motion.div
+                    className="mt-6 flex flex-wrap gap-3"
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.48, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <span className={getButtonClassName({ variant: "primary", size: "lg" })}>
+                      {heroCtaLabel}
+                    </span>
+                  </motion.div>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {heroBanners.length > 1 ? (
+            <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
+              {heroBanners.map((banner, index) => (
+                <button
+                  key={banner.id ?? index}
+                  type="button"
+                  aria-label={`Show banner ${index + 1}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setActiveHeroIndex(index);
+                  }}
+                  className={`h-2 rounded-full transition-all ${
+                    index === activeHeroIndex
+                      ? "w-6 bg-[var(--vr-primary)]"
+                      : "w-2 bg-white/70 hover:bg-white"
+                  }`}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </Link>
+    </section>
+  );
+
+  const offerBannerSection: ReactNode = middleBanners.length > 0 ? (
+    <section className="grid gap-4 md:grid-cols-2">
+      {middleBanners.map((banner) => {
+        const target = resolveBannerLink(banner.linkUrl, "/products");
+        const targetIsExternal = target.startsWith("http");
+        const desktopImage = banner.desktopImageUrl ?? banner.imageUrl;
+        const mobileImage = banner.mobileImageUrl ?? desktopImage;
+        const usesDirectVideo = banner.mediaType === "VIDEO" && isDirectVideoUrl(banner.videoUrl);
+        const videoEmbedUrl = getVideoEmbedUrl(banner.videoUrl);
+        const inner = (
+          <div className="group relative overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] shadow-[0_14px_32px_rgba(15,23,42,0.08)]">
+            <div className="relative aspect-[16/7] w-full overflow-hidden">
+              {banner.mediaType === "VIDEO" && banner.videoUrl ? (
+                usesDirectVideo ? (
+                  <BannerVideo src={banner.videoUrl} poster={desktopImage} className="h-full w-full object-cover" />
+                ) : videoEmbedUrl ? (
+                  <iframe
+                    src={`${videoEmbedUrl}?autoplay=1&mute=1&controls=1&loop=1&playsinline=1&rel=0&modestbranding=1`}
+                    title={banner.title ?? "Banner"}
+                    className="h-full w-full object-cover"
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                  />
+                ) : null
+              ) : desktopImage ? (
+                <picture>
+                  {mobileImage ? <source media="(max-width: 768px)" srcSet={mobileImage} /> : null}
+                  <img src={desktopImage} alt={banner.title ?? "Banner"} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                </picture>
+              ) : null}
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0)_45%,rgba(15,23,42,0.65)_100%)]" />
+            </div>
+            <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+              {banner.title ? <h3 className="text-lg font-bold drop-shadow">{banner.title}</h3> : null}
+              {banner.subtitle ? <p className="mt-1 max-w-[80%] text-xs leading-5 text-white/85">{banner.subtitle}</p> : null}
+              {banner.ctaText ? (
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[var(--vr-primary)]">
+                  {banner.ctaText} <ArrowRight className="h-3 w-3" />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+        return targetIsExternal ? (
+          <a key={banner.id} href={target} target="_blank" rel="noreferrer">{inner}</a>
+        ) : (
+          <Link key={banner.id} to={target}>{inner}</Link>
+        );
+      })}
+    </section>
+  ) : null;
+
+  const featuredCategoriesSection: ReactNode = categoryCards.length > 0 ? (
+    <RevealStagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" stagger={0.09}>
+      {categoryCards.map(({ category, previewImage }) => (
+        <RevealStaggerItem key={category.id}>
+          <Link to={getCategoryLink(category)}>
+            <Card className="vr-card-lift flex h-full items-center gap-4">
+              <motion.div
+                className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#eff6ff,#fff7ed)]"
+                whileHover={{ scale: 1.07, rotate: 2 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {previewImage ? (
+                  <img src={previewImage} alt={category.name} className="h-full w-full object-contain p-3" />
+                ) : (
+                  <span className="display-font text-lg font-bold uppercase text-[var(--vr-primary)]">{categoryPlaceholder(category)}</span>
+                )}
+              </motion.div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Shop Category</div>
+                <h3 className="mt-2 text-xl font-extrabold text-[var(--vr-text)]">{category.name}</h3>
+                <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
+                  Browse Now
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+              </div>
+            </Card>
+          </Link>
+        </RevealStaggerItem>
+      ))}
+    </RevealStagger>
+  ) : null;
+
+  function renderProductSection(section: HomeSection | null, fallbackTitle: string, fallbackEyebrow: string) {
+    if (!section) {
+      return null;
+    }
+    const visibleProducts = section.products.slice(0, section.maxProducts ?? 8);
+    if (!visibleProducts.length) {
+      return null;
+    }
+    return (
+      <section className="rounded-[1.9rem] border border-[var(--vr-border)] bg-white px-5 py-5 shadow-[0_18px_44px_rgba(15,23,42,0.06)] lg:px-6 lg:py-6">
+        <RevealFadeUp>
+          <SectionHeader
+            eyebrow={fallbackEyebrow}
+            title={section.title || fallbackTitle}
+            description={section.subtitle}
+            action={
+              <Link
+                to="/products"
+                className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--vr-text)] transition hover:text-[var(--vr-primary)]"
+              >
+                View All <ArrowRight className="h-4 w-4" />
+              </Link>
+            }
+          />
+        </RevealFadeUp>
+        <RevealStagger className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" stagger={0.07} delay={0.05}>
+          {visibleProducts.map((product) => (
+            <RevealStaggerItem key={`${section.sectionType}-${product.id}`}>
+              <ProductCard product={product} />
+            </RevealStaggerItem>
+          ))}
+        </RevealStagger>
+      </section>
+    );
+  }
+
+  const trustBadgesSection: ReactNode = homepageBuilder.trustBadges.length > 0 ? (
+    <section className="rounded-[1.8rem] border border-[var(--vr-border)] bg-white px-5 py-5 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
+      <div className="flex flex-wrap items-center gap-3">
+        {homepageBuilder.trustBadges.map((badge) => (
+          <Badge key={badge.label} tone="primary">{badge.label}</Badge>
+        ))}
+      </div>
+    </section>
+  ) : null;
+
+  const whyChooseUsSection: ReactNode = (
+    <section className="overflow-hidden rounded-[2rem] border border-[var(--vr-border)] bg-white shadow-[0_8px_32px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-col gap-5 border-b border-[var(--vr-border)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-8">
+        <RevealSlideLeft>
+          <div className="text-[11px] font-black uppercase tracking-[0.26em] text-[var(--vr-primary)]">Why VR Technologies</div>
+          <h2 className="mt-1 text-2xl font-extrabold text-[var(--vr-text)] lg:text-3xl">Refurbished tech, done right.</h2>
+        </RevealSlideLeft>
+        <RevealSlideRight>
+          <div className="flex flex-wrap gap-x-7 gap-y-3">
+            {([
+              { value: trustedCustomerCount, suffix: "+", label: "Customers" },
+              { value: allProducts.length || 78, suffix: "+", label: "Products" },
+              { value: stores.length || 4, suffix: "", label: "Stores" },
+              { value: Number(averageStoreRating), suffix: "★", label: "Rating", decimals: 1 }
+            ] as const).map((s) => (
+              <div key={s.label} className="text-center">
+                <div className="display-font text-[1.6rem] font-extrabold leading-none text-[var(--vr-primary)]">
+                  <CountUpStat value={s.value} suffix={s.suffix} decimals={"decimals" in s ? s.decimals : 0} />
+                </div>
+                <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--vr-muted)]">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </RevealSlideRight>
+      </div>
+      <RevealStagger className="grid divide-y divide-[var(--vr-border)] sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4" stagger={0.08}>
+        {homepageBuilder.whyChooseUsCards.map((card) => {
+          const tone = getWhyCardToneClasses(card.tone);
+          return (
+            <RevealStaggerItem key={`${card.title}-${card.stat}`}>
+              <div className="flex items-start gap-4 p-5 lg:p-6">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.85rem] ${tone.bg}`}>
+                  <ShieldCheck className={`h-5 w-5 ${tone.color}`} />
+                </div>
+                <div>
+                  <div className={`text-[11px] font-black uppercase tracking-[0.18em] ${tone.color}`}>{card.stat}</div>
+                  <div className="mt-0.5 text-[15px] font-bold text-[var(--vr-text)]">{card.title}</div>
+                  <p className="mt-1 text-[12px] leading-5 text-[var(--vr-muted)]">{card.desc}</p>
+                </div>
+              </div>
+            </RevealStaggerItem>
+          );
+        })}
+      </RevealStagger>
+    </section>
+  );
+
+  const orderedBuilderSections = [...homepageBuilder.sections]
+    .filter((section) => section.enabled)
+    .sort((left, right) => left.order - right.order);
+
+  const renderBuilderSection = (section: HomepageBuilderConfig["sections"][number]) => {
+    switch (section.type) {
+      case "ANNOUNCEMENT_BAR":
+        return homepageBuilder.announcementBar.enabled ? (
+          <section key={section.type} className="rounded-[1.4rem] border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900 shadow-[0_10px_26px_rgba(14,165,233,0.08)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm font-semibold">{homepageBuilder.announcementBar.text}</div>
+              {homepageBuilder.announcementBar.linkLabel && homepageBuilder.announcementBar.linkUrl ? (
+                <Link to={homepageBuilder.announcementBar.linkUrl} className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-sky-700">
+                  {homepageBuilder.announcementBar.linkLabel} <ArrowRight className="h-3 w-3" />
+                </Link>
+              ) : null}
+            </div>
+          </section>
+        ) : null;
+      case "HERO_BANNER":
+        return <div key={section.type}>{heroSection}</div>;
+      case "FEATURED_CATEGORIES":
+        return <div key={section.type}>{featuredCategoriesSection}</div>;
+      case "FEATURED_PRODUCTS":
+        return <div key={section.type}>{renderProductSection(featuredProductsSection, "Featured Products", "Featured Products")}</div>;
+      case "BEST_SELLERS":
+        return <div key={section.type}>{renderProductSection(bestSellersSection, "Best Sellers", "Best Sellers")}</div>;
+      case "OFFER_BANNER":
+        return <div key={section.type}>{offerBannerSection}</div>;
+      case "TRUST_BADGES":
+        return <div key={section.type}>{trustBadgesSection}</div>;
+      case "WHY_CHOOSE_US":
+        return <div key={section.type}>{whyChooseUsSection}</div>;
+      default:
+        return null;
+    }
+  };
+
+  const builderSections = orderedBuilderSections
+    .filter((section) => section.type !== "TRUST_BADGES" && section.type !== "WHY_CHOOSE_US")
+    .map(renderBuilderSection)
+    .filter(Boolean);
+
+  const footerCredibilitySections = orderedBuilderSections
+    .filter((section) => section.type === "TRUST_BADGES" || section.type === "WHY_CHOOSE_US")
+    .map(renderBuilderSection)
+    .filter(Boolean);
+
+  const hasBuilderContent = builderSections.length > 0 || footerCredibilitySections.length > 0;
 
   return (
     <div className="vr-page-shell space-y-6">
@@ -491,206 +907,11 @@ export function HomePage() {
         </div>
       ) : null}
 
-      <section className="overflow-hidden rounded-[2rem] border border-[var(--vr-border)] bg-white p-1.5 shadow-[0_22px_55px_rgba(15,23,42,0.08)] lg:sticky lg:top-[8.9rem] lg:z-20">
-        <Link to={heroLink} className="block">
-          <div
-            className={`group relative overflow-hidden rounded-[1.7rem] ${
-              heroHasOverlayContent
-                ? "bg-[linear-gradient(135deg,#edf4ff,#dbeafe_48%,#fff7ed)]"
-                : "bg-white"
-            }`}
-          >
-            {!heroHasOverlayContent ? <div className="aspect-[16/7] min-h-[260px] w-full sm:min-h-[340px] lg:min-h-[430px]" /> : null}
-            {heroBanner?.mediaType === "VIDEO" && heroBanner.videoUrl ? (
-              heroUsesDirectVideo ? (
-                <BannerVideo
-                  src={heroBanner.videoUrl}
-                  poster={heroDesktopImage}
-                  className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "opacity-[0.96]" : ""}`}
-                />
-              ) : heroVideoEmbedUrl ? (
-                <iframe
-                  src={`${heroVideoEmbedUrl}?autoplay=1&mute=1&controls=1&loop=1&playsinline=1&rel=0&modestbranding=1`}
-                  title={heroTitle}
-                  className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "scale-[1.06] opacity-[0.96]" : ""}`}
-                  allow="autoplay; encrypted-media; picture-in-picture"
-                />
-              ) : null
-            ) : heroDesktopImage ? (
-              <picture>
-                {heroMobileImage ? <source media="(max-width: 768px)" srcSet={heroMobileImage} /> : null}
-                <img
-                  src={heroDesktopImage}
-                  alt={heroTitle}
-                  loading="eager"
-                  decoding="async"
-                  className={`absolute inset-0 h-full w-full object-cover ${heroHasOverlayContent ? "opacity-[0.95]" : ""}`}
-                />
-              </picture>
-            ) : null}
+      {builderSections.length > 0 ? <div className="space-y-6">{builderSections}</div> : null}
 
-            {heroHasOverlayContent ? (
-              <>
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.88)_34%,rgba(248,250,252,0.35)_68%,rgba(255,255,255,0.08)_100%)]" />
-                <div className="relative z-10 grid min-h-[430px] items-end gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-9">
-                  <div className="max-w-[620px]">
-                    <motion.div
-                      className="flex flex-wrap items-center gap-2"
-                      initial={{ opacity: 0, y: -14 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <Badge tone="accent" className="bg-[rgba(245,158,11,0.18)] text-[#b45309]">
-                        {heroBanner?.mediaType === "VIDEO" ? "Video Campaign Live" : "Premium Refurbished Picks"}
-                      </Badge>
-                      {heroCategory ? <Badge tone="primary">{heroCategory.name}</Badge> : null}
-                    </motion.div>
-                    <motion.h1
-                      className="display-font mt-5 text-[2.3rem] font-extrabold leading-[1.02] text-[var(--vr-dark)] sm:text-[2.8rem] lg:text-[3.55rem]"
-                      initial={{ opacity: 0, y: 26 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.65, delay: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      {heroTitle}
-                    </motion.h1>
-                    {heroSubtitle ? (
-                      <motion.p
-                        className="mt-4 max-w-[520px] text-base leading-8 text-[var(--vr-muted)] lg:text-lg"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.5, delay: 0.48, ease: [0.22, 1, 0.36, 1] }}
-                      >
-                        {heroSubtitle}
-                      </motion.p>
-                    ) : null}
-                    <motion.div
-                      className="mt-6 flex flex-wrap gap-3"
-                      initial={{ opacity: 0, y: 16 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.48, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <span className={getButtonClassName({ variant: "primary", size: "lg" })}>
-                        {heroCtaLabel}
-                      </span>
-                    </motion.div>
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {heroBanners.length > 1 ? (
-              <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
-                {heroBanners.map((banner, index) => (
-                  <button
-                    key={banner.id ?? index}
-                    type="button"
-                    aria-label={`Show banner ${index + 1}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setActiveHeroIndex(index);
-                    }}
-                    className={`h-2 rounded-full transition-all ${
-                      index === activeHeroIndex
-                        ? "w-6 bg-[var(--vr-primary)]"
-                        : "w-2 bg-white/70 hover:bg-white"
-                    }`}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </Link>
-      </section>
-
-      {middleBanners.length > 0 ? (
-        <section className="grid gap-4 md:grid-cols-2">
-          {middleBanners.map((banner) => {
-            const target = resolveBannerLink(banner.linkUrl, "/products");
-            const targetIsExternal = target.startsWith("http");
-            const desktopImage = banner.desktopImageUrl ?? banner.imageUrl;
-            const mobileImage = banner.mobileImageUrl ?? desktopImage;
-            const usesDirectVideo = banner.mediaType === "VIDEO" && isDirectVideoUrl(banner.videoUrl);
-            const videoEmbedUrl = getVideoEmbedUrl(banner.videoUrl);
-            const inner = (
-              <div className="group relative overflow-hidden rounded-[1.6rem] border border-[var(--vr-border)] bg-[var(--vr-surface-soft)] shadow-[0_14px_32px_rgba(15,23,42,0.08)]">
-                <div className="relative aspect-[16/7] w-full overflow-hidden">
-                  {banner.mediaType === "VIDEO" && banner.videoUrl ? (
-                    usesDirectVideo ? (
-                      <BannerVideo
-                        src={banner.videoUrl}
-                        poster={desktopImage}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : videoEmbedUrl ? (
-                      <iframe
-                        src={`${videoEmbedUrl}?autoplay=1&mute=1&controls=1&loop=1&playsinline=1&rel=0&modestbranding=1`}
-                        title={banner.title ?? "Banner"}
-                        className="h-full w-full object-cover"
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                      />
-                    ) : null
-                  ) : desktopImage ? (
-                    <picture>
-                      {mobileImage ? <source media="(max-width: 768px)" srcSet={mobileImage} /> : null}
-                      <img src={desktopImage} alt={banner.title ?? "Banner"} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
-                    </picture>
-                  ) : null}
-                  <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0)_45%,rgba(15,23,42,0.65)_100%)]" />
-                </div>
-                <div className="absolute inset-x-0 bottom-0 p-4 text-white">
-                  {banner.title ? <h3 className="text-lg font-bold drop-shadow">{banner.title}</h3> : null}
-                  {banner.subtitle ? <p className="mt-1 max-w-[80%] text-xs leading-5 text-white/85">{banner.subtitle}</p> : null}
-                  {banner.ctaText ? (
-                    <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[var(--vr-primary)]">
-                      {banner.ctaText} <ArrowRight className="h-3 w-3" />
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-            return targetIsExternal ? (
-              <a key={banner.id} href={target} target="_blank" rel="noreferrer">{inner}</a>
-            ) : (
-              <Link key={banner.id} to={target}>{inner}</Link>
-            );
-          })}
-        </section>
-      ) : null}
-
-      <RevealStagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" stagger={0.09}>
-        {categoryCards.map(({ category, previewImage }) => (
-          <RevealStaggerItem key={category.id}>
-            <Link to={getCategoryLink(category)}>
-              <Card className="vr-card-lift flex h-full items-center gap-4">
-                <motion.div
-                  className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#eff6ff,#fff7ed)]"
-                  whileHover={{ scale: 1.07, rotate: 2 }}
-                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                >
-                  {previewImage ? (
-                    <img src={previewImage} alt={category.name} className="h-full w-full object-contain p-3" />
-                  ) : (
-                    <span className="display-font text-lg font-bold uppercase text-[var(--vr-primary)]">{categoryPlaceholder(category)}</span>
-                  )}
-                </motion.div>
-                <div className="min-w-0">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--vr-primary)]">Shop Category</div>
-                  <h3 className="mt-2 text-xl font-extrabold text-[var(--vr-text)]">{category.name}</h3>
-                  <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[var(--vr-primary)]">
-                    Browse Now
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          </RevealStaggerItem>
-        ))}
-      </RevealStagger>
-
-      {homeProductSections.length > 0 ? (
+      {additionalHomeSections.length > 0 ? (
         <div className="space-y-8">
-          {homeProductSections.map((section) => {
+          {additionalHomeSections.map((section) => {
             const isDealsSection = section.sectionType === "TODAYS_DEALS";
             const visibleProducts = section.products.slice(0, section.maxProducts ?? 8);
             const eyebrow = homeSectionEyebrows[section.sectionType] ?? "Product Section";
@@ -734,13 +955,13 @@ export function HomePage() {
             );
           })}
         </div>
-      ) : (
+      ) : !hasBuilderContent ? (
         <EmptyState
           eyebrow="Home Sections"
           title="Homepage sections will appear here."
-          description="Publish sections from the admin panel to control homepage product rows and their order."
+          description="Configure the homepage builder and publish product sections from the admin panel to control the homepage flow."
         />
-      )}
+      ) : null}
 
       {recentlyViewed.length > 0 ? (
         <section>
@@ -913,69 +1134,9 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="space-y-4">
-        <RevealStagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" stagger={0.08}>
-          {homeTrustStats.map((item) => (
-            <RevealStaggerItem key={item.label}>
-              <div className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
-                <div className="display-font text-3xl font-extrabold text-[var(--vr-primary)]">
-                  <CountUpStat value={item.value} suffix={item.suffix} decimals={item.decimals ?? 0} />
-                </div>
-                <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--vr-text)]">{item.label}</div>
-                <p className="mt-2 text-xs leading-6 text-[var(--vr-muted)]">{item.description}</p>
-              </div>
-            </RevealStaggerItem>
-          ))}
-        </RevealStagger>
+      {footerCredibilitySections.length > 0 ? <div className="space-y-6">{footerCredibilitySections}</div> : null}
 
-        <RevealStagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" stagger={0.07} delay={0.05}>
-          {trustBar.map((item) => (
-            <RevealStaggerItem key={item.title}>
-              <div className="rounded-[1.4rem] border border-[var(--vr-border)] bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.05)]">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-[rgba(30,58,138,0.08)] p-2.5 text-[var(--vr-primary)]">
-                    <item.icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--vr-text)]">{item.title}</div>
-                    <div className="mt-1 text-xs text-[var(--vr-muted)]">{item.subtitle}</div>
-                  </div>
-                </div>
-              </div>
-            </RevealStaggerItem>
-          ))}
-        </RevealStagger>
-
-        <section className="overflow-hidden rounded-[1.9rem] border border-[rgba(30,58,138,0.14)] bg-[linear-gradient(135deg,#0f172a,#1e3a8a)] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.16)] lg:p-7">
-          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr] xl:items-center">
-            <RevealSlideLeft>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#fde68a]">
-                Publish-ready shopping
-              </div>
-              <h2 className="display-font mt-4 text-3xl font-extrabold leading-tight lg:text-[2.7rem]">
-                More confidence before every add to cart.
-              </h2>
-              <p className="mt-3 max-w-xl text-sm leading-7 text-white/72 lg:text-base">
-                Buyers get a clearer reason to trust refurbished products: service, stores, pricing, and product condition stay connected from homepage to detail page.
-              </p>
-            </RevealSlideLeft>
-            <RevealStagger className="grid gap-3 md:grid-cols-3" stagger={0.1} delay={0.15}>
-              {buyerAssurance.map((item) => (
-                <RevealStaggerItem key={item.title}>
-                  <div className="rounded-[1.35rem] border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/12 text-[#fde68a]">
-                      <item.icon className="h-5 w-5" />
-                    </div>
-                    <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-[#fde68a]">{item.stat}</div>
-                    <h3 className="mt-2 text-base font-bold text-white">{item.title}</h3>
-                    <p className="mt-2 text-xs leading-6 text-white/66">{item.description}</p>
-                  </div>
-                </RevealStaggerItem>
-              ))}
-            </RevealStagger>
-          </div>
-        </section>
-      </section>
     </div>
   );
 }
+

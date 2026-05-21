@@ -1,14 +1,14 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../hooks/usePageMeta";
-import { Boxes, CheckCircle2, Grid3X3, SlidersHorizontal } from "lucide-react";
+import { Boxes, CheckCircle2, ChevronLeft, ChevronRight, Grid3X3, MoreHorizontal, SlidersHorizontal } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { FilterChips } from "components/catalog/FilterChips";
 import { FilterSidebar } from "components/catalog/FilterSidebar";
 import { ProductCard } from "components/catalog/ProductCard";
 import { SortDropdown } from "components/catalog/SortDropdown";
+import { RecentlyViewedStrip } from "components/catalog/RecentlyViewedStrip";
 import { Button, getButtonClassName } from "components/ui/Button";
 import { Card } from "components/ui/Card";
 import { EmptyState } from "components/ui/EmptyState";
@@ -28,10 +28,11 @@ import {
 import { catalogApi } from "api/client";
 import { useSelectedStore } from "store/storeStore";
 import { SiteFooter } from "components/layouts/SiteFooter";
-import { footerPolicyLinks, footerSupportLinks, vrTechnologiesLogo } from "../constants/siteConfig";
+import { vrTechnologiesLogo } from "../constants/siteConfig";
 import type { ProductCondition } from "types";
 
 type SortOption = "best-sellers" | "price-low" | "price-high" | "newest" | "highest-rated";
+const PRODUCTS_PER_PAGE = 8;
 
 function normalizeText(value: string) {
   return value.trim().toLowerCase();
@@ -119,7 +120,7 @@ function ProductListingSkeleton() {
   return (
       <div className="px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[1600px] space-y-6">
-          <div className="flex flex-col gap-6 lg:h-[calc(100vh-var(--sticky-offset,9.5rem)-1.5rem)] lg:flex-row lg:items-start lg:overflow-hidden">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
             <SkeletonLoader className="hidden h-[760px] w-[280px] shrink-0 rounded-[2rem] lg:block" />
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -133,7 +134,6 @@ function ProductListingSkeleton() {
 }
 
 export function ProductsPage() {
-  usePageMeta({ title: "All Products", description: "Browse certified refurbished laptops, desktops, accessories and more. Filter by brand, price, RAM and storage." });
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<CatalogFilterState>(initialCatalogFilters);
   const [mobileDraftFilters, setMobileDraftFilters] = useState<CatalogFilterState>(initialCatalogFilters);
@@ -142,6 +142,7 @@ export function ProductsPage() {
   const [mobileDraftSortBy, setMobileDraftSortBy] = useState<SortOption>("best-sellers");
   const [isSortDrawerOpen, setIsSortDrawerOpen] = useState(false);
   const [hasHydratedFilters, setHasHydratedFilters] = useState(false);
+  const catalogSectionRef = useRef<HTMLDivElement | null>(null);
   const gridTopRef = useRef<HTMLDivElement | null>(null);
   const previousAppliedKeyRef = useRef<string | null>(null);
   const isApplyingUrlStateRef = useRef(false);
@@ -150,6 +151,8 @@ export function ProductsPage() {
   const brandsQuery = useQuery({ queryKey: ["brands"], queryFn: catalogApi.getBrands });
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: catalogApi.getCategories });
   const storesQuery = useQuery({ queryKey: ["stores"], queryFn: catalogApi.getStores });
+  const navigationQuery = useQuery({ queryKey: ["site-navigation"], queryFn: catalogApi.getNavigation });
+  const siteSettingsQuery = useQuery({ queryKey: ["site-settings"], queryFn: catalogApi.getSiteSettings });
   const selectedStoreIdFromStore = useSelectedStore((state) => state.selectedStoreId);
   const clearSelectedStore = useSelectedStore((state) => state.clearStore);
   const storeIdParam = searchParams.get("storeId");
@@ -447,6 +450,16 @@ export function ProductsPage() {
         return cloned.sort((left, right) => getProductMerchandisingScore(right) - getProductMerchandisingScore(left));
     }
   }, [products, sortBy]);
+  const rawPageParam = Number(searchParams.get("page") ?? "1");
+  const currentPage = Number.isFinite(rawPageParam) && rawPageParam > 0 ? Math.floor(rawPageParam) : 1;
+  const totalPages = Math.max(1, Math.ceil(displayProducts.length / PRODUCTS_PER_PAGE));
+  const resolvedPage = Math.min(currentPage, totalPages);
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (resolvedPage - 1) * PRODUCTS_PER_PAGE;
+    return displayProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
+  }, [displayProducts, resolvedPage]);
+  const visibleRangeStart = displayProducts.length ? (resolvedPage - 1) * PRODUCTS_PER_PAGE + 1 : 0;
+  const visibleRangeEnd = Math.min(resolvedPage * PRODUCTS_PER_PAGE, displayProducts.length);
 
   const filterCounts = useMemo(() => buildCatalogFilterCounts(catalogProducts, filters), [catalogProducts, filters]);
   const mobileFilterCounts = useMemo(() => buildCatalogFilterCounts(catalogProducts, mobileDraftFilters), [catalogProducts, mobileDraftFilters]);
@@ -594,8 +607,14 @@ export function ProductsPage() {
 
   const activeCategory = categories.find((category) => filters.categoryIds.includes(category.id));
   const activeBrand = brands.find((brand) => filters.brandIds.includes(brand.id));
-  const desktopStickyTop = "calc(var(--sticky-offset, 9.5rem) + 2.75rem)";
-
+  const seoQuery = useQuery({
+    queryKey: ["seo-setting", activeCategory ? "CATEGORY" : "PRODUCT_LIST", activeCategory?.id ?? null],
+    queryFn: () => activeCategory
+      ? catalogApi.getSeoSetting({ targetType: "CATEGORY", targetId: activeCategory.id, targetSlug: activeCategory.slug })
+      : catalogApi.getSeoSetting({ targetType: "PRODUCT_LIST" }),
+    enabled: !categoriesQuery.isLoading
+  });
+  const seoSetting = seoQuery.data;
   const alternativeCategoriesForBrand = useMemo(
     () =>
       activeBrand
@@ -647,6 +666,15 @@ export function ProductsPage() {
           ? `Products at ${activeStore.name}`
           : "All Products";
 
+  usePageMeta({
+    title: seoSetting?.pageTitle ?? pageTitle,
+    description: seoSetting?.metaDescription ?? "Browse certified refurbished laptops, desktops, accessories and more. Filter by brand, price, RAM and storage.",
+    keywords: seoSetting?.metaKeywords,
+    image: seoSetting?.ogImageUrl,
+    canonicalUrl: seoSetting?.canonicalUrl,
+    noIndex: seoSetting?.noIndex
+  });
+
   const firstError = brandsQuery.error ?? categoriesQuery.error ?? catalogProductsQuery.error ?? productsQuery.error ?? null;
   const mobilePreviewCount = useMemo(() => {
     const normalizedDraft = normalizePriceFilterState(mobileDraftFilters, priceBounds);
@@ -665,10 +693,24 @@ export function ProductsPage() {
     }
 
     if (previousAppliedKeyRef.current !== appliedKey) {
-      gridTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollCatalogToTop();
       previousAppliedKeyRef.current = appliedKey;
     }
   }, [appliedFilters, hasHydratedFilters, sortBy]);
+
+  useEffect(() => {
+    if (currentPage === resolvedPage) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (resolvedPage <= 1) {
+      nextParams.delete("page");
+    } else {
+      nextParams.set("page", String(resolvedPage));
+    }
+    setSearchParams(nextParams, { replace: true });
+  }, [currentPage, resolvedPage, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (isFilterDrawerOpen) {
@@ -718,6 +760,55 @@ export function ProductsPage() {
     setIsSortDrawerOpen(false);
   }
 
+  function scrollCatalogToTop() {
+    const target = catalogSectionRef.current;
+    if (!target || typeof window === "undefined") {
+      return;
+    }
+
+    const stickyOffsetValue = getComputedStyle(document.documentElement).getPropertyValue("--sticky-offset").trim();
+    const stickyOffset = Number.parseFloat(stickyOffsetValue || "0");
+    const top = target.getBoundingClientRect().top + window.scrollY - stickyOffset - 24;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }
+
+  function setPage(page: number) {
+    const nextPage = Math.max(1, Math.min(page, totalPages));
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextPage <= 1) {
+      nextParams.delete("page");
+    } else {
+      nextParams.set("page", String(nextPage));
+    }
+    setSearchParams(nextParams, { replace: true });
+    scrollCatalogToTop();
+  }
+
+  function buildPaginationItems() {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const items: Array<number | "ellipsis"> = [1];
+    const start = Math.max(2, resolvedPage - 1);
+    const end = Math.min(totalPages - 1, resolvedPage + 1);
+
+    if (start > 2) {
+      items.push("ellipsis");
+    }
+
+    for (let page = start; page <= end; page += 1) {
+      items.push(page);
+    }
+
+    if (end < totalPages - 1) {
+      items.push("ellipsis");
+    }
+
+    items.push(totalPages);
+    return items;
+  }
+
   if (firstError) {
     return (
       <div className="vr-page-shell">
@@ -736,12 +827,9 @@ export function ProductsPage() {
 
   return (
     <>
-    <div
-      className="bg-white pb-[88px] lg:pb-0"
-      style={{ "--page-h": "calc(100vh - var(--sticky-offset, 9.5rem))" } as CSSProperties}
-    >
-      <div className="px-4 pt-4 sm:px-6 lg:flex lg:h-[var(--page-h)] lg:flex-col lg:overflow-hidden lg:px-8">
-        <div className="mx-auto w-full max-w-[1600px] lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+    <div className="bg-white pb-[88px] lg:pb-0">
+      <div className="px-4 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1600px]">
           {activeStore ? (
             <div className="mb-4 shrink-0 rounded-[1.6rem] border border-[rgba(30,58,138,0.12)] bg-[rgba(30,58,138,0.05)] px-5 py-4 shadow-[0_12px_30px_rgba(30,58,138,0.06)]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -768,17 +856,11 @@ export function ProductsPage() {
           ) : null}
 
           <div
-            className="flex flex-col gap-3 lg:min-h-0 lg:flex-1 lg:flex-row"
-            style={{ "--products-sticky-top": desktopStickyTop } as CSSProperties}
+            ref={catalogSectionRef}
+            className="flex flex-col gap-3 lg:flex-row lg:items-start"
+            style={{ scrollMarginTop: "calc(var(--sticky-offset, 9.5rem) + 1.5rem)" }}
           >
-            {/* Sidebar column: this div is the flex item and stretches to the full products height,
-                giving the sticky aside inside it the correct bounds throughout the entire product list */}
-            <motion.div
-              initial={{ opacity: 0, x: -28 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="vr-scrollbar hidden lg:flex lg:w-[280px] lg:shrink-0 lg:flex-col lg:overflow-y-auto"
-            >
+            <div className="hidden lg:block lg:w-[280px] lg:shrink-0">
               <FilterSidebar
                 brands={brands}
                 categories={categories}
@@ -793,12 +875,13 @@ export function ProductsPage() {
                 state={filters}
                 setState={setFilters}
                 onClear={resetAllFilters}
-                sticky={false}
-                className=""
+                sticky
+                stickyTop="calc(var(--sticky-offset, 9.5rem) + 0.25rem)"
+                className="w-full self-start"
               />
-            </motion.div>
+            </div>
 
-            <div className="min-w-0 flex-1 lg:flex lg:min-h-0 lg:flex-col">
+            <div className="min-w-0 flex-1">
               {/* ── Desktop toolbar — outside scroll container so dropdown is never clipped ── */}
               <div className="mb-3 hidden shrink-0 overflow-visible rounded-2xl border border-[var(--vr-border)] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.05)] lg:block">
                 <div className="flex items-center gap-3 px-4 py-2.5">
@@ -826,7 +909,7 @@ export function ProductsPage() {
               </div>
 
               {/* ── Products scroll area ── */}
-              <div ref={gridTopRef} className="vr-scrollbar min-h-0 flex-1 lg:overflow-y-auto lg:overscroll-contain">
+              <div ref={gridTopRef}>
                 {/* ── Mobile toolbar ── */}
                 <div className="mb-4 lg:hidden">
                   <div className="rounded-[2rem] border border-[rgba(30,58,138,0.08)] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -876,8 +959,8 @@ export function ProductsPage() {
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.22 }}
                       >
-                        <StaggerGrid className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                          {displayProducts.map((product) => (
+                        <StaggerGrid className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+                          {paginatedProducts.map((product) => (
                             <StaggerItem key={product.id}>
                               <ProductCard product={product} />
                             </StaggerItem>
@@ -928,9 +1011,58 @@ export function ProductsPage() {
                   )}
                 </section>
 
+                {displayProducts.length > 0 ? (
+                  <div className="mt-8 flex flex-col gap-4 border-t border-[var(--vr-border)] pt-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="text-base text-[var(--vr-muted)]">
+                      Showing {visibleRangeStart}-{visibleRangeEnd} of {displayProducts.length} results
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        aria-label="Previous page"
+                        disabled={resolvedPage === 1}
+                        onClick={() => setPage(resolvedPage - 1)}
+                        className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--vr-border)] bg-white text-[var(--vr-muted)] transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      {buildPaginationItems().map((item, index) =>
+                        item === "ellipsis" ? (
+                          <span key={`ellipsis-${index}`} className="inline-flex h-12 w-12 items-center justify-center text-[var(--vr-muted)]">
+                            <MoreHorizontal className="h-5 w-5" />
+                          </span>
+                        ) : (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => setPage(item)}
+                            className={`inline-flex h-12 min-w-[3rem] items-center justify-center rounded-2xl border px-4 text-lg font-semibold transition ${
+                              item === resolvedPage
+                                ? "border-black bg-black text-white"
+                                : "border-[var(--vr-border)] bg-white text-black hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)]"
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        )
+                      )}
+                      <button
+                        type="button"
+                        aria-label="Next page"
+                        disabled={resolvedPage === totalPages}
+                        onClick={() => setPage(resolvedPage + 1)}
+                        className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--vr-border)] bg-white text-[var(--vr-muted)] transition hover:border-[var(--vr-primary)] hover:text-[var(--vr-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
+
+          <RecentlyViewedStrip />
         </div>
       </div>
     </div>
@@ -939,9 +1071,9 @@ export function ProductsPage() {
     <SiteFooter
       vrTechnologiesLogo={vrTechnologiesLogo}
       quickCategories={categories}
-      footerSupportLinks={footerSupportLinks}
-      footerPolicyLinks={footerPolicyLinks}
+      footerLinks={navigationQuery.data?.footerMenu ?? []}
       primaryStore={activeStore ?? null}
+      siteSettings={siteSettingsQuery.data}
     />
 
       <FilterDrawer
