@@ -147,7 +147,9 @@ export function AiConcierge() {
     try {
       let apiBase = "/api";
       if (typeof window !== "undefined") {
-        if (window.location.hostname === "myadmin.anushatechnologies.com") {
+        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+          apiBase = "http://localhost:8080/api";
+        } else if (window.location.hostname === "myadmin.anushatechnologies.com") {
           apiBase = "https://vr.anushatechnologies.com/api";
         } else {
           const envUrl = import.meta.env.VITE_API_BASE_URL;
